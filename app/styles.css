@@ -44,4 +44,6 @@ footer { border-top: 1px solid var(--line); padding: 28px 0 40px; display: flex;
 .delete-button { border: 0; background: none; color: #a94b42; font-size: 11px; padding: 6px; text-decoration: underline; }.delete-button:hover { color: #7f2d27; }
 .sign-in-button { border: 1px solid var(--ink); background: var(--ink); color: white; border-radius: 6px; padding: 10px 14px; font-size: 12px; font-weight: 600; }.setup-warning { color: var(--muted); font-size: 13px; }
 .passkey-button { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 6px; padding: 10px 12px; font-size: 11px; font-weight: 600; }
+.trip-status button { min-height: 36px; }
+@media (max-width: 760px) { .topbar { position: sticky; top: 0; z-index: 4; background: var(--cream); }.nav-right { gap: 6px; }.sign-in-button, .passkey-button { padding: 9px 10px; font-size: 10px; }.trip-status { display: grid; grid-template-columns: repeat(2, auto); justify-items: end; gap: 4px; }.trip-status .settle-button { grid-column: 1 / -1; width: 100%; }.trip-status .settled, .trip-status .waiting { grid-column: 1 / -1; }.trip-row { min-height: 112px; }.summary-copy { padding-top: 48px; } }
 .summary, button, a, select { touch-action: manipulation; }

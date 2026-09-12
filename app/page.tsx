@@ -204,10 +204,10 @@ export default function Home() {
     setEditingTrip(null);
   }
 
-  async function settleTrip(trip: Trip) {
+  async function settleTrip(trip: Trip, paidByMemberId?: string) {
     const settledAt = new Date().toISOString();
     if (supabase && user) {
-      const result = await supabase.rpc("settle_ride_trip", { target_trip_id: trip.id, settlement_note: null });
+      const result = await supabase.rpc("settle_ride_trip", { target_trip_id: trip.id, settlement_note: null, settlement_paid_by: paidByMemberId ?? currentUserId });
       if (result.error) return setNotice(result.error.message);
       await loadWorkspace(user.id);
     } else {
@@ -235,7 +235,13 @@ export default function Home() {
       friendlyName: `Ridewise ${currentName}`,
       webauthn: { rpId: window.location.hostname, rpOrigins: [window.location.origin] },
     });
-    if (result.error) return setNotice(result.error.message);
+    if (result.error) {
+      const errorText = result.error.message.toLowerCase();
+      if (errorText.includes("mfa enroll is disabled") || errorText.includes("mfa_webauthn_enroll_not_enabled")) {
+        return setNotice("Supabase blocked passkeys: enable MFA enrollment and Passkey authentication in Authentication settings for ydwldldtircfuwviijabt, then try again.");
+      }
+      return setNotice(result.error.message);
+    }
     setNotice("Passkey added. You can use it on this device next time.");
   }
 
@@ -307,7 +313,7 @@ export default function Home() {
             <div className="section-heading"><div><div className="eyebrow">Shared rides</div><h2>Split between both riders.</h2></div><button className="text-button" onClick={() => requestAction("add")}>New trip</button></div>
             <div className="ledger-summary"><div><span>Shared ride total</span><strong>{money.format(sharedTotal)}</strong></div><div><span>Rides</span><strong>{sharedTrips.length}</strong></div><small>Each shared ride is counted as half for Omar and half for Khaled.</small></div>
             <div className="ledger">
-              {sharedTrips.length === 0 ? <div className="ledger-empty">No shared rides logged yet.</div> : sharedTrips.map((trip) => <TripRow key={trip.id} trip={trip} members={members} currentUserId={currentUserId} onEdit={() => { setEditingTrip(trip); setModal("edit"); }} onSettle={() => void settleTrip(trip)} onDelete={() => void deleteTrip(trip)} />)}
+              {sharedTrips.length === 0 ? <div className="ledger-empty">No shared rides logged yet.</div> : sharedTrips.map((trip) => <TripRow key={trip.id} trip={trip} members={members} currentUserId={currentUserId} onEdit={() => { setEditingTrip(trip); setModal("edit"); }} onSettle={(memberId) => void settleTrip(trip, memberId)} onDelete={() => void deleteTrip(trip)} />)}
             </div>
           </section>
 
@@ -315,7 +321,7 @@ export default function Home() {
             <div className="section-heading"><div><div className="eyebrow">Solo rides</div><h2>Full cost, one rider.</h2></div><button className="text-button" onClick={() => requestAction("add")}>New solo ride</button></div>
             <div className="solo-total-grid">{soloTotals.map((member) => <article className="solo-total" key={member.user_id}><span>{member.display_name} alone</span><strong>{money.format(member.total)}</strong><small>{member.rides.length} {member.rides.length === 1 ? "ride" : "rides"} paid in full</small></article>)}</div>
             <div className="ledger">
-              {soloTrips.length === 0 ? <div className="ledger-empty">No solo rides logged yet.</div> : soloTrips.map((trip) => <TripRow key={trip.id} trip={trip} members={members} currentUserId={currentUserId} onEdit={() => { setEditingTrip(trip); setModal("edit"); }} onSettle={() => void settleTrip(trip)} onDelete={() => void deleteTrip(trip)} />)}
+              {soloTrips.length === 0 ? <div className="ledger-empty">No solo rides logged yet.</div> : soloTrips.map((trip) => <TripRow key={trip.id} trip={trip} members={members} currentUserId={currentUserId} onEdit={() => { setEditingTrip(trip); setModal("edit"); }} onSettle={(memberId) => void settleTrip(trip, memberId)} onDelete={() => void deleteTrip(trip)} />)}
             </div>
           </section>
         </>
@@ -342,12 +348,14 @@ export default function Home() {
   );
 }
 
-function TripRow({ trip, members, currentUserId, onEdit, onSettle, onDelete }: { trip: Trip; members: Member[]; currentUserId: string; onEdit: () => void; onSettle: () => void; onDelete: () => void }) {
+function TripRow({ trip, members, currentUserId, onEdit, onSettle, onDelete }: { trip: Trip; members: Member[]; currentUserId: string; onEdit: () => void; onSettle: (memberId?: string) => void; onDelete: () => void }) {
   const payer = members.find((member) => member.user_id === trip.paid_by)?.display_name ?? "Unknown";
   const debtor = getOtherMember(members, trip.paid_by)?.display_name ?? "The other rider";
   const soloRider = members.find((member) => member.user_id === trip.solo_by)?.display_name ?? "Solo rider";
   const tripLabel = trip.trip_mode === "solo" ? `${soloRider} alone` : trip.direction === "campus" ? "To campus" : "Back home";
   const currentUserIsDebtor = trip.paid_by !== currentUserId;
+  const debtorId = members.find((member) => member.user_id !== trip.paid_by)?.user_id;
+  const debtorName = members.find((member) => member.user_id === debtorId)?.display_name ?? "the other rider";
 
   return <article className="trip-row">
     <div className={`trip-direction ${trip.direction}`}><span /><b>{tripLabel}</b><small>{dateFormatter.format(new Date(trip.ride_at))}</small></div>
@@ -355,7 +363,7 @@ function TripRow({ trip, members, currentUserId, onEdit, onSettle, onDelete }: {
     <div className="trip-price"><b>{money.format(trip.amount)}</b><span>{trip.trip_mode === "solo" ? "full cost" : `${money.format(trip.amount / 2)} each`}</span></div>
     <div className="trip-status">
       <button className="edit-button" onClick={onEdit}>Edit</button><button className="delete-button" onClick={onDelete}>Delete</button>
-      {trip.settled_at ? <span className="settled">Settled</span> : trip.trip_mode === "solo" ? <span className="waiting">Paid in full</span> : currentUserIsDebtor ? <button className="settle-button" onClick={onSettle}>I paid my half</button> : <span className="waiting">Waiting for {debtor}</span>}
+      {trip.settled_at ? <span className="settled">Settled</span> : trip.trip_mode === "solo" ? <span className="waiting">Paid in full</span> : currentUserIsDebtor ? <button className="settle-button" onClick={() => onSettle(currentUserId)}>I paid my half</button> : <button className="settle-button" onClick={() => onSettle(debtorId)}>Mark {debtorName} paid</button>}
     </div>
   </article>;
 }
