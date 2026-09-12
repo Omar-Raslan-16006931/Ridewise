@@ -1,0 +1,25 @@
+{
+  "name": "ridewise",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.95.3",
+    "next": "16.1.6",
+    "react": "19.2.3",
+    "react-dom": "19.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.13.4",
+    "@types/react": "19.0.8",
+    "@types/react-dom": "19.0.3",
+    "eslint": "9.19.0",
+    "eslint-config-next": "16.1.6",
+    "typescript": "5.7.3"
+  }
+}
