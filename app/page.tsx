@@ -22,7 +22,7 @@ type AuthUser = { id: string; email?: string } | null;
 type AnalyticsPeriod = "lifetime" | "week" | "month";
 
 const allowedGoogleUsers: Record<string, string> = {
-  "fbertya@gmail.com": "Omar",
+  "fbertya79@gmail.com": "Omar",
   "khaldoonelmasry@gmail.com": "Khaled",
 };
 
