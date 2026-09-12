@@ -40,10 +40,11 @@ function getTripMemberSpend(trip: Trip, memberId: string) {
 
 export default function Home() {
   const supabase = getSupabase();
+  const previewMode = !supabase && process.env.NODE_ENV !== "production";
   const [user, setUser] = useState<AuthUser>(null);
-  const [group, setGroup] = useState<RideGroup | null>(supabase ? null : demoGroup);
-  const [members, setMembers] = useState<Member[]>(supabase ? [] : demoMembers);
-  const [trips, setTrips] = useState<Trip[]>(supabase ? [] : demoTrips);
+  const [group, setGroup] = useState<RideGroup | null>(previewMode ? demoGroup : null);
+  const [members, setMembers] = useState<Member[]>(previewMode ? demoMembers : []);
+  const [trips, setTrips] = useState<Trip[]>(previewMode ? demoTrips : []);
   const [modal, setModal] = useState<Modal>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [analyticsPeriod, setAnalyticsPeriod] = useState<AnalyticsPeriod>("lifetime");
@@ -259,16 +260,17 @@ export default function Home() {
         <div className="nav-right">
           {group && <button className="group-switch" onClick={() => requestAction("share")}>{group.name}<i /></button>}
           {supabase && user && <button className="avatar" onClick={() => { void supabase.auth.signOut(); setGroup(null); }}>{currentName.slice(0, 1)}</button>}
-          {!supabase && <span className="demo-tag">Preview</span>}
+          {supabase && !user && <button className="sign-in-button" onClick={() => setModal("sign-in")}>Sign in with Google</button>}
+          {previewMode && <span className="demo-tag">Preview</span>}
         </div>
       </nav>
 
       {!group ? (
         <section className="empty-space">
-          <div className="eyebrow">Your shared ride ledger</div>
+          <div className="eyebrow">Private shared ride ledger</div>
           <h1>Make every ride<br />feel fair.</h1>
-          <p>Start your shared space, then send Khaled the invite code. Every trip splits itself down the middle.</p>
-          <div className="empty-actions"><button className="primary" onClick={() => setModal("create-space")}>Create our space</button><button className="secondary" onClick={() => setModal("join-space")}>Join with a code</button></div>
+          <p>{supabase ? "Sign in with your approved Google account to open the Omar + Khaled ledger." : "Supabase is not configured for this deployment yet."}</p>
+          <div className="empty-actions">{supabase ? <button className="primary" onClick={() => setModal("sign-in")}>Sign in with Google</button> : <span className="setup-warning">Add the Supabase environment variables in Vercel to enable login.</span>}</div>
         </section>
       ) : (
         <>
