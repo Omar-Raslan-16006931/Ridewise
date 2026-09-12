@@ -1,5 +1,5 @@
--- Ridewise: run this once in the Supabase SQL Editor.
--- It uses magic-link Auth and a shared group whose members can both edit trips.
+-- Ridewise v2: unified analytics and flexible trip modes.
+-- It treats every trip as either shared or solo, and counts trip spend in every relevant total.
 
 create extension if not exists pgcrypto;
 
@@ -24,12 +24,16 @@ create table if not exists public.ride_group_members (
   primary key (group_id, user_id)
 );
 
+create type public.trip_mode as enum ('shared', 'solo');
+
 create table if not exists public.ride_trips (
   id uuid primary key default gen_random_uuid(),
   group_id uuid not null references public.ride_groups(id) on delete cascade,
   ride_at timestamptz not null default now(),
   direction text not null check (direction in ('campus', 'home')),
   amount numeric(10,2) not null check (amount > 0 and amount < 100000),
+  trip_mode public.trip_mode not null default 'shared',
+  solo_by uuid references public.profiles(id),
   paid_by uuid not null references public.profiles(id),
   created_by uuid not null references public.profiles(id),
   notes text check (char_length(notes) <= 280),
@@ -37,11 +41,10 @@ create table if not exists public.ride_trips (
   settled_by uuid references public.profiles(id),
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
+  check ((trip_mode = 'shared' and solo_by is null) or (trip_mode = 'solo' and solo_by is not null)),
   check ((settled_at is null and settled_by is null) or (settled_at is not null and settled_by is not null))
 );
 
--- One immutable record for every reimbursement. A trip has one owed half,
--- so it can have at most one settlement record.
 create table if not exists public.ride_settlements (
   id uuid primary key default gen_random_uuid(),
   group_id uuid not null references public.ride_groups(id) on delete cascade,
@@ -58,6 +61,7 @@ create table if not exists public.ride_settlements (
 
 create index if not exists ride_trips_group_ride_at_idx on public.ride_trips (group_id, ride_at desc);
 create index if not exists ride_trips_group_payer_ride_at_idx on public.ride_trips (group_id, paid_by, ride_at desc);
+create index if not exists ride_trips_mode_idx on public.ride_trips (group_id, trip_mode, ride_at desc);
 create index if not exists ride_trips_open_balance_idx on public.ride_trips (group_id, paid_by, ride_at desc) where settled_at is null;
 create index if not exists ride_settlements_group_settled_at_idx on public.ride_settlements (group_id, settled_at desc);
 create index if not exists ride_settlements_group_payer_idx on public.ride_settlements (group_id, paid_by, settled_at desc);
@@ -130,6 +134,15 @@ begin
   if not exists (select 1 from public.ride_group_members where group_id = new.group_id and user_id = new.created_by) then
     raise exception 'The creator must belong to this shared group';
   end if;
+  if new.trip_mode = 'solo' and new.solo_by is null then
+    raise exception 'Solo rides must specify the rider';
+  end if;
+  if new.trip_mode = 'solo' and not exists (select 1 from public.ride_group_members where group_id = new.group_id and user_id = new.solo_by) then
+    raise exception 'The solo rider must belong to this shared group';
+  end if;
+  if new.trip_mode = 'shared' and new.solo_by is not null then
+    raise exception 'Shared rides must not carry a solo rider';
+  end if;
   if new.settled_by is not null and not exists (select 1 from public.ride_group_members where group_id = new.group_id and user_id = new.settled_by) then
     raise exception 'The settling member must belong to this shared group';
   end if;
@@ -143,8 +156,6 @@ create trigger validate_ride_trip_members
 before insert or update on public.ride_trips
 for each row execute function public.validate_ride_trip_members();
 
--- This RPC writes the settlement and updates the trip together, so the ledger
--- cannot show a settled ride without a corresponding money transaction.
 create or replace function public.settle_ride_trip(target_trip_id uuid, settlement_note text default null)
 returns public.ride_settlements
 language plpgsql
@@ -160,6 +171,9 @@ begin
   if current_trip.id is null or not public.is_ride_group_member(current_trip.group_id) then
     raise exception 'Ride not found';
   end if;
+  if current_trip.trip_mode = 'solo' and current_trip.solo_by = caller_id then
+    raise exception 'Solo rides are already billed to that rider and do not need a split settlement';
+  end if;
   if current_trip.paid_by = caller_id then raise exception 'The Uber payer cannot settle their own ride'; end if;
   if current_trip.settled_at is not null then raise exception 'This ride is already settled'; end if;
   insert into public.ride_settlements (group_id, trip_id, amount, paid_by, received_by, recorded_by, note)
@@ -172,37 +186,41 @@ begin
 end;
 $$;
 
--- Returns period analytics without exposing data outside the caller's shared space.
 create or replace function public.ride_analytics(target_group_id uuid, starts_at timestamptz default null, ends_at timestamptz default null)
 returns jsonb
-language sql
-stable
+language plpgsql
 security invoker
 set search_path = public
 as $$
-  with scoped_trips as (
-    select * from public.ride_trips
-    where group_id = target_group_id
-      and (starts_at is null or ride_at >= starts_at)
-      and (ends_at is null or ride_at < ends_at)
-  ), member_totals as (
-    select m.user_id, m.display_name,
-      coalesce(sum(t.amount) filter (where t.paid_by = m.user_id), 0) as paid_total,
-      count(t.id) filter (where t.paid_by = m.user_id) as rides_paid
-    from public.ride_group_members m
-    left join scoped_trips t on true
-    where m.group_id = target_group_id
-    group by m.user_id, m.display_name
-  )
+declare result jsonb;
+begin
   select jsonb_build_object(
-    'rides', (select count(*) from scoped_trips),
-    'days_active', (select count(distinct ride_at::date) from scoped_trips),
-    'total_spend', (select coalesce(sum(amount), 0) from scoped_trips),
-    'average_ride_cost', (select coalesce(avg(amount), 0) from scoped_trips),
-    'campus_rides', (select count(*) from scoped_trips where direction = 'campus'),
-    'home_rides', (select count(*) from scoped_trips where direction = 'home'),
-    'member_totals', (select coalesce(jsonb_agg(jsonb_build_object('user_id', user_id, 'name', display_name, 'paid_total', paid_total, 'rides_paid', rides_paid)), '[]'::jsonb) from member_totals)
-  );
+    'rides', (select count(*) from public.ride_trips where group_id = target_group_id and (starts_at is null or ride_at >= starts_at) and (ends_at is null or ride_at < ends_at)),
+    'shared_rides', (select count(*) from public.ride_trips where group_id = target_group_id and trip_mode = 'shared' and (starts_at is null or ride_at >= starts_at) and (ends_at is null or ride_at < ends_at)),
+    'solo_rides', (select count(*) from public.ride_trips where group_id = target_group_id and trip_mode = 'solo' and (starts_at is null or ride_at >= starts_at) and (ends_at is null or ride_at < ends_at)),
+    'days_active', (select count(distinct ride_at::date) from public.ride_trips where group_id = target_group_id and (starts_at is null or ride_at >= starts_at) and (ends_at is null or ride_at < ends_at)),
+    'total_spend', (select coalesce(sum(amount), 0) from public.ride_trips where group_id = target_group_id and (starts_at is null or ride_at >= starts_at) and (ends_at is null or ride_at < ends_at)),
+    'average_ride_cost', (select coalesce(avg(amount), 0) from public.ride_trips where group_id = target_group_id and (starts_at is null or ride_at >= starts_at) and (ends_at is null or ride_at < ends_at)),
+    'campus_rides', (select count(*) from public.ride_trips where group_id = target_group_id and direction = 'campus' and (starts_at is null or ride_at >= starts_at) and (ends_at is null or ride_at < ends_at)),
+    'home_rides', (select count(*) from public.ride_trips where group_id = target_group_id and direction = 'home' and (starts_at is null or ride_at >= starts_at) and (ends_at is null or ride_at < ends_at)),
+    'member_totals', (
+      select coalesce(jsonb_agg(jsonb_build_object(
+        'user_id', m.user_id,
+        'name', m.display_name,
+        'paid_total', coalesce(sum(t.amount) filter (where t.paid_by = m.user_id), 0),
+        'rides_paid', count(t.id) filter (where t.paid_by = m.user_id),
+        'total_spend', coalesce(sum(t.amount / 2) filter (where t.trip_mode = 'shared'), 0) + coalesce(sum(t.amount) filter (where t.trip_mode = 'solo' and t.solo_by = m.user_id), 0)
+      )), '[]'::jsonb)
+      from public.ride_group_members m
+      left join public.ride_trips t on t.group_id = m.group_id and (t.trip_mode = 'shared' or t.solo_by = m.user_id)
+      and (starts_at is null or t.ride_at >= starts_at)
+      and (ends_at is null or t.ride_at < ends_at)
+      where m.group_id = target_group_id
+      group by m.user_id, m.display_name
+    )
+  ) into result;
+  return result;
+end;
 $$;
 
 alter table public.profiles enable row level security;

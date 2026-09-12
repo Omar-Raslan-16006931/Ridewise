@@ -2,6 +2,9 @@
   "name": "ridewise",
   "version": "1.0.0",
   "private": true,
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
@@ -10,16 +13,16 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "2.95.3",
-    "next": "16.1.6",
-    "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "next": "15.3.5",
+    "react": "19.0.0",
+    "react-dom": "19.0.0"
   },
   "devDependencies": {
     "@types/node": "22.13.4",
-    "@types/react": "19.0.8",
-    "@types/react-dom": "19.0.3",
+    "@types/react": "19.0.2",
+    "@types/react-dom": "19.0.2",
     "eslint": "9.19.0",
-    "eslint-config-next": "16.1.6",
+    "eslint-config-next": "15.3.5",
     "typescript": "5.7.3"
   }
 }
