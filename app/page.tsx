@@ -265,8 +265,8 @@ export default function Home() {
         <section className="empty-space">
           <div className="eyebrow">Private shared ride ledger</div>
           <h1>Make every ride<br />feel fair.</h1>
-          <p>{supabase ? "Sign in with your approved Google account to open the Omar + Khaled ledger." : "Supabase is not configured for this deployment yet."}</p>
-          <div className="empty-actions">{supabase ? <button className="primary" onClick={() => setModal("sign-in")}>Sign in with Google</button> : <span className="setup-warning">Add the Supabase environment variables in Vercel to enable login.</span>}</div>
+          <p>{!supabase ? "Supabase is not configured for this deployment yet." : user ? "Your Google account is connected. Create the shared space or join Omar's invite." : "Sign in with your approved Google account to open the Omar + Khaled ledger."}</p>
+          <div className="empty-actions">{!supabase ? <span className="setup-warning">Add the Supabase environment variables in Vercel to enable login.</span> : user ? <><button className="primary" onClick={() => setModal("create-space")}>Create our space</button><button className="secondary" onClick={() => setModal("join-space")}>Join with a code</button></> : <button className="primary" onClick={() => setModal("sign-in")}>Sign in with Google</button>}</div>
         </section>
       ) : (
         <>
