@@ -21,11 +21,6 @@ type Modal = "add" | "edit" | "sign-in" | "create-space" | "join-space" | "share
 type AuthUser = { id: string; email?: string } | null;
 type AnalyticsPeriod = "lifetime" | "week" | "month";
 
-const allowedGoogleUsers: Record<string, string> = {
-  "fbertya79@gmail.com": "Omar",
-  "khaldoonelmasry@gmail.com": "Khaled",
-};
-
 const money = new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 2 });
 const dateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
 
@@ -55,23 +50,9 @@ export default function Home() {
   const currentName = members.find((member) => member.user_id === currentUserId)?.display_name ?? "Omar";
   const otherMember = getOtherMember(members, currentUserId);
 
-  function getAllowedDisplayName(email?: string) {
-    return email ? allowedGoogleUsers[email.toLowerCase()] ?? null : null;
-  }
-
   async function handleAuthSession(sessionUser: { id: string; email?: string } | null) {
     if (!sessionUser) {
       setUser(null);
-      setLoading(false);
-      return;
-    }
-    if (!getAllowedDisplayName(sessionUser.email)) {
-      await supabase?.auth.signOut();
-      setUser(null);
-      setGroup(null);
-      setMembers([]);
-      setTrips([]);
-      setNotice("This Google account is not one of the two Ridewise members.");
       setLoading(false);
       return;
     }
@@ -278,6 +259,8 @@ export default function Home() {
         </div>
       </nav>
 
+      {notice && <div className="notice global-notice"><span>{notice}</span><button onClick={() => setNotice("")}>Close</button></div>}
+
       {!group ? (
         <section className="empty-space">
           <div className="eyebrow">Private shared ride ledger</div>
@@ -301,8 +284,6 @@ export default function Home() {
               <div className="orbit-label top">each rider</div><div className="orbit-label bottom">every trip</div>
             </div>
           </section>
-
-          {notice && <div className="notice"><span>{notice}</span><button onClick={() => setNotice("")}>Close</button></div>}
 
           <section className="stat-grid" aria-label="Ride statistics">
             <article className="stat-card total-card"><span>All trips</span><strong>{trips.length}</strong><small>shared and solo rides</small></article>
