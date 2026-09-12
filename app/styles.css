@@ -43,4 +43,5 @@ footer { border-top: 1px solid var(--line); padding: 28px 0 40px; display: flex;
 @media (max-width: 760px) { .ledger-summary { align-items: start; flex-wrap: wrap; gap: 18px 28px; }.ledger-summary small { width: 100%; margin-left: 0; }.solo-total { min-height: 110px; padding: 16px 13px; } }
 .delete-button { border: 0; background: none; color: #a94b42; font-size: 11px; padding: 6px; text-decoration: underline; }.delete-button:hover { color: #7f2d27; }
 .sign-in-button { border: 1px solid var(--ink); background: var(--ink); color: white; border-radius: 6px; padding: 10px 14px; font-size: 12px; font-weight: 600; }.setup-warning { color: var(--muted); font-size: 13px; }
+.passkey-button { border: 1px solid var(--line); background: transparent; color: var(--ink); border-radius: 6px; padding: 10px 12px; font-size: 11px; font-weight: 600; }
 .summary, button, a, select { touch-action: manipulation; }

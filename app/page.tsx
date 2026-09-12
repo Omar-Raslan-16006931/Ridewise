@@ -103,6 +103,8 @@ export default function Home() {
 
   useEffect(() => {
     if (!supabase) return;
+    const authError = new URLSearchParams(window.location.search).get("error_description");
+    if (authError) setNotice(`Google sign-in failed: ${authError.replace(/\+/g, " ")}`);
     supabase.auth.getSession().then(({ data }) => {
       const sessionUser = data.session?.user;
       void handleAuthSession(sessionUser ? { id: sessionUser.id, email: sessionUser.email } : null);
@@ -245,6 +247,17 @@ export default function Home() {
     setNotice("Trip deleted.");
   }
 
+  async function registerPasskey() {
+    if (!supabase || !user) return;
+    if (!window.PublicKeyCredential) return setNotice("Passkeys are not supported in this browser.");
+    const result = await supabase.auth.mfa.webauthn.register({
+      friendlyName: `Ridewise ${currentName}`,
+      webauthn: { rpId: window.location.hostname, rpOrigins: [window.location.origin] },
+    });
+    if (result.error) return setNotice(result.error.message);
+    setNotice("Passkey added. You can use it on this device next time.");
+  }
+
   function requestAction(action: Modal) {
     if (supabase && !user) setModal("sign-in");
     else if (supabase && !group && action === "add") setModal("create-space");
@@ -259,7 +272,7 @@ export default function Home() {
         <button className="brand" onClick={() => setNotice("")}>ridewise<span>.</span></button>
         <div className="nav-right">
           {group && <button className="group-switch" onClick={() => requestAction("share")}>{group.name}<i /></button>}
-          {supabase && user && <button className="avatar" onClick={() => { void supabase.auth.signOut(); setGroup(null); }}>{currentName.slice(0, 1)}</button>}
+          {supabase && user && <><button className="passkey-button" onClick={() => void registerPasskey()}>Add passkey</button><button className="avatar" onClick={() => { void supabase.auth.signOut(); setGroup(null); }}>{currentName.slice(0, 1)}</button></>}
           {supabase && !user && <button className="sign-in-button" onClick={() => setModal("sign-in")}>Sign in with Google</button>}
           {previewMode && <span className="demo-tag">Preview</span>}
         </div>
