@@ -232,18 +232,22 @@ export default function Home() {
   async function registerPasskey() {
     if (!supabase || !user) return;
     if (!window.PublicKeyCredential) return setNotice("Passkeys are not supported in this browser.");
-    const result = await supabase.auth.mfa.webauthn.register({
-      friendlyName: `Ridewise ${currentName}`,
-      webauthn: { rpId: window.location.hostname, rpOrigins: [window.location.origin] },
-    });
-    if (result.error) {
-      const errorText = result.error.message.toLowerCase();
-      if (errorText.includes("mfa enroll is disabled") || errorText.includes("mfa_webauthn_enroll_not_enabled")) {
-        return setNotice("Supabase blocked passkeys: enable MFA enrollment and Passkey authentication in Authentication settings for ydwldldtircfuwviijabt, then try again.");
+    if (!window.isSecureContext) return setNotice("Passkeys require a secure HTTPS connection. Open Ridewise from its HTTPS address and try again.");
+    try {
+      const result = await supabase.auth.mfa.webauthn.register({ friendlyName: `Ridewise ${currentName}` });
+      if (result.error) {
+        const errorText = result.error.message.toLowerCase();
+        if (errorText.includes("mfa enroll is disabled") || errorText.includes("mfa_webauthn_enroll_not_enabled")) {
+          return setNotice("Passkeys are disabled in Supabase. Enable MFA enrollment and Passkey authentication, then try again.");
+        }
+        return setNotice(result.error.message);
       }
-      return setNotice(result.error.message);
+      setNotice("Passkey added. You can use it on this device next time.");
+    } catch (error) {
+      const errorName = error instanceof DOMException ? error.name : "";
+      if (errorName === "NotAllowedError") return setNotice("Passkey setup was cancelled or blocked by the browser.");
+      setNotice(error instanceof Error ? error.message : "Passkey setup failed. Try again from an HTTPS browser.");
     }
-    setNotice("Passkey added. You can use it on this device next time.");
   }
 
   function requestAction(action: Modal) {
