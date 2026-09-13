@@ -9,6 +9,7 @@ Use Node 20 LTS for local development and deployment. This project is currently 
 ## Set up Supabase
 
 1. Create a Supabase project, then run [`supabase/schema_v2.sql`](./supabase/schema_v2.sql) once in its SQL Editor. This is the final schema: it creates shared and solo trips, settlement history, access rules, and analytics functions. Do not run the old `schema.sql` for a new project.
+   If an existing project returns `404` for `settle_ride_trip`, run [`supabase/migrate_settlement_paid_by.sql`](./supabase/migrate_settlement_paid_by.sql) once in the same SQL Editor.
 2. In Supabase Auth, enable Email / Magic Link and add your Vercel URL to the Redirect URLs list.
 3. Copy `.env.local.example` to `.env.local` and fill in the Project URL and publishable key from Supabase Connect.
 4. Run `npm install`, then `npm run dev`.
