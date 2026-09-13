@@ -284,11 +284,6 @@ export default function Home() {
               <p className="balance-note">{stats.net === 0 ? "Log the next ride when you’re ready." : stats.net > 0 ? "across your unsettled rides" : "across their unsettled rides"}</p>
               <button className="primary add-button" onClick={() => requestAction("add")}><b>+</b> Add a ride</button>
             </div>
-            <div className="balance-orbit" aria-hidden="true">
-              <div className="orbit-line line-one" /><div className="orbit-line line-two" />
-              <div className="orbit-center">50<span>%</span></div>
-              <div className="orbit-label top">each rider</div><div className="orbit-label bottom">every trip</div>
-            </div>
           </section>
 
           <section className="stat-grid" aria-label="Ride statistics">
