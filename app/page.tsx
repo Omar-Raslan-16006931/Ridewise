@@ -44,8 +44,20 @@ export default function Home() {
   const [modal, setModal] = useState<Modal>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
   const [analyticsPeriod, setAnalyticsPeriod] = useState<AnalyticsPeriod>("lifetime");
-  const [notice, setNotice] = useState("");
+  const [toasts, setToasts] = useState<{ id: string; type: "success" | "error" | "info"; message: string }[]>([]);
   const [loading, setLoading] = useState(Boolean(supabase));
+
+  function notify(message: string, type: "success" | "error" | "info" = "success") {
+    const id = crypto.randomUUID();
+    setToasts((prev) => [...prev, { id, type, message }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3800);
+  }
+
+  function dismissToast(id: string) {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }
 
   const currentUserId = user?.id ?? "omar";
   const currentName = members.find((member) => member.user_id === currentUserId)?.display_name ?? "Omar";
@@ -86,7 +98,7 @@ export default function Home() {
   useEffect(() => {
     if (!supabase) return;
     const authError = new URLSearchParams(window.location.search).get("error_description");
-    if (authError) setNotice(`Google sign-in failed: ${authError.replace(/\+/g, " ")}`);
+    if (authError) notify(`Google sign-in failed: ${authError.replace(/\+/g, " ")}`, "error");
     supabase.auth.getSession().then(({ data }) => {
       const sessionUser = data.session?.user;
       void handleAuthSession(sessionUser ? { id: sessionUser.id, email: sessionUser.email } : null);
@@ -187,22 +199,22 @@ export default function Home() {
 
     if (tripBeingEdited) {
       setTrips((existing) => existing.map((trip) => trip.id === tripBeingEdited.id ? { ...trip, ...tripValues } : trip));
-      setNotice("Trip details updated.");
+      notify("Trip details updated.", "success");
       if (supabase && user) {
         const result = await supabase.from("ride_trips").update(tripValues).eq("id", tripBeingEdited.id);
         if (result.error) {
-          setNotice(result.error.message);
+          notify(`Failed to update trip: ${result.error.message}`, "error");
         }
         await loadWorkspace(user.id, false);
       }
     } else {
       const newTrip = { id: crypto.randomUUID(), ...tripValues, settled_at: null, settled_by: null };
       setTrips((existing) => [newTrip, ...existing]);
-      setNotice("Trip saved. The split is ready.");
+      notify("Trip saved. The split is ready.", "success");
       if (supabase && user) {
         const result = await supabase.from("ride_trips").insert({ ...newTrip, group_id: group.id, created_by: user.id });
         if (result.error) {
-          setNotice(result.error.message);
+          notify(`Failed to save trip: ${result.error.message}`, "error");
         }
         await loadWorkspace(user.id, false);
       }
@@ -212,11 +224,11 @@ export default function Home() {
   async function settleTrip(trip: Trip, paidByMemberId?: string) {
     const settledAt = new Date().toISOString();
     setTrips((existing) => existing.map((item) => item.id === trip.id ? { ...item, settled_at: settledAt, settled_by: currentUserId } : item));
-    setNotice("That half is marked paid.");
+    notify("That half is marked paid.", "success");
     if (supabase && user) {
       const result = await supabase.rpc("settle_ride_trip", { target_trip_id: trip.id, settlement_note: null, settlement_paid_by: paidByMemberId ?? currentUserId });
       if (result.error) {
-        setNotice(result.error.message);
+        notify(`Failed to settle trip: ${result.error.message}`, "error");
       }
       await loadWorkspace(user.id, false);
     }
@@ -225,11 +237,11 @@ export default function Home() {
   async function deleteTrip(trip: Trip) {
     if (!window.confirm("Delete this trip? This cannot be undone.")) return;
     setTrips((existing) => existing.filter((item) => item.id !== trip.id));
-    setNotice("Trip deleted.");
+    notify("Trip deleted.", "success");
     if (supabase && user) {
       const result = await supabase.from("ride_trips").delete().eq("id", trip.id);
       if (result.error) {
-        setNotice(result.error.message);
+        notify(`Failed to delete trip: ${result.error.message}`, "error");
       }
       await loadWorkspace(user.id, false);
     }
@@ -237,22 +249,22 @@ export default function Home() {
 
   async function registerPasskey() {
     if (!supabase || !user) return;
-    if (!window.PublicKeyCredential) return setNotice("Passkeys are not supported in this browser.");
-    if (!window.isSecureContext) return setNotice("Passkeys require a secure HTTPS connection. Open Ridewise from its HTTPS address and try again.");
+    if (!window.PublicKeyCredential) return notify("Passkeys are not supported in this browser.", "error");
+    if (!window.isSecureContext) return notify("Passkeys require a secure HTTPS connection. Open Ridewise from its HTTPS address and try again.", "error");
     try {
       const result = await supabase.auth.mfa.webauthn.register({ friendlyName: `Ridewise ${currentName}` });
       if (result.error) {
         const errorText = result.error.message.toLowerCase();
         if (errorText.includes("mfa enroll is disabled") || errorText.includes("mfa_webauthn_enroll_not_enabled")) {
-          return setNotice("Passkeys are disabled in Supabase. Enable MFA enrollment and Passkey authentication, then try again.");
+          return notify("Passkeys are disabled in Supabase. Enable MFA enrollment and Passkey authentication, then try again.", "error");
         }
-        return setNotice(result.error.message);
+        return notify(result.error.message, "error");
       }
-      setNotice("Passkey added. You can use it on this device next time.");
+      notify("Passkey added! You can use it on this device next time.", "success");
     } catch (error) {
       const errorName = error instanceof DOMException ? error.name : "";
-      if (errorName === "NotAllowedError") return setNotice("Passkey setup was cancelled or blocked by the browser.");
-      setNotice(error instanceof Error ? error.message : "Passkey setup failed. Try again from an HTTPS browser.");
+      if (errorName === "NotAllowedError") return notify("Passkey setup was cancelled or blocked by the browser.", "info");
+      notify(error instanceof Error ? error.message : "Passkey setup failed. Try again from an HTTPS browser.", "error");
     }
   }
 
@@ -266,17 +278,47 @@ export default function Home() {
 
   return (
     <main>
+      {toasts.length > 0 && (
+        <div className="toast-portal" role="region" aria-label="Notifications" aria-live="polite">
+          {toasts.map((toast) => (
+            <div key={toast.id} className={`toast-card toast-${toast.type}`}>
+              <span className="toast-badge">
+                {toast.type === "success" && (
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="3 8.5 6.5 12 13 4" />
+                  </svg>
+                )}
+                {toast.type === "error" && (
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8" cy="8" r="6" />
+                    <line x1="8" y1="5" x2="8" y2="8" />
+                    <line x1="8" y1="11" x2="8.01" y2="11" />
+                  </svg>
+                )}
+                {toast.type === "info" && (
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="8" cy="8" r="6" />
+                    <line x1="8" y1="11" x2="8" y2="8" />
+                    <line x1="8" y1="5" x2="8.01" y2="5" />
+                  </svg>
+                )}
+              </span>
+              <span className="toast-text">{toast.message}</span>
+              <button className="toast-dismiss" onClick={() => dismissToast(toast.id)} aria-label="Close notification">×</button>
+            </div>
+          ))}
+        </div>
+      )}
+
       <nav className="topbar">
-        <button className="brand" onClick={() => setNotice("")}>ridewise<span>.</span></button>
+        <button className="brand" onClick={() => notify("Ridewise — Shared Uber ledger", "info")}>ridewise<span>.</span></button>
         <div className="nav-right">
           {group && <button className="group-switch" onClick={() => requestAction("share")}>{group.name}<i /></button>}
-          {supabase && user && <><button className="passkey-button" onClick={() => void registerPasskey()}>Add passkey</button><button className="avatar" onClick={() => { void supabase.auth.signOut(); setGroup(null); }}>{currentName.slice(0, 1)}</button></>}
+          {supabase && user && <><button className="passkey-button" onClick={() => void registerPasskey()}>Add passkey</button><button className="avatar" onClick={() => { void supabase.auth.signOut(); setGroup(null); notify("Signed out.", "info"); }}>{currentName.slice(0, 1)}</button></>}
           {supabase && !user && <button className="sign-in-button" onClick={() => setModal("sign-in")}>Sign in with Google</button>}
           {previewMode && <span className="demo-tag">Preview</span>}
         </div>
       </nav>
-
-      {notice && <div className="notice global-notice"><span>{notice}</span><button onClick={() => setNotice("")}>Close</button></div>}
 
       {!group ? (
         <section className="empty-space">
@@ -334,20 +376,24 @@ export default function Home() {
       )}
 
       <footer><span>Ridewise is a shared balance, not a bank.</span><span>Split every Uber equally.</span></footer>
-      {modal && <ModalWindow modal={modal} close={() => { setModal(null); setEditingTrip(null); }} members={members} group={group} user={user} editingTrip={editingTrip} supabaseEnabled={Boolean(supabase)} onAdd={saveTrip} onCreate={async (name, person) => {
+      {modal && <ModalWindow modal={modal} close={() => { setModal(null); setEditingTrip(null); }} members={members} group={group} user={user} editingTrip={editingTrip} supabaseEnabled={Boolean(supabase)} notify={notify} onAdd={saveTrip} onCreate={async (name, person) => {
         if (!supabase || !user) return;
         const result = await supabase.rpc("create_ride_group", { group_name: name, member_name: person });
-        if (result.error) return setNotice(result.error.message);
-        await loadWorkspace(user.id); setModal("share");
+        if (result.error) return notify(result.error.message, "error");
+        await loadWorkspace(user.id, false);
+        setModal("share");
+        notify("Shared space created! Invite code ready.", "success");
       }} onJoin={async (code, person) => {
         if (!supabase || !user) return;
         const result = await supabase.rpc("join_ride_group", { group_code: code, member_name: person });
-        if (result.error) return setNotice(result.error.message);
-        await loadWorkspace(user.id); setModal(null);
+        if (result.error) return notify(result.error.message, "error");
+        await loadWorkspace(user.id, false);
+        setModal(null);
+        notify("Joined shared space successfully!", "success");
       }} onSignIn={async () => {
         if (!supabase) return;
         const result = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
-        if (result.error) return setNotice(result.error.message);
+        if (result.error) return notify(result.error.message, "error");
         setModal(null);
       }} />}
     </main>
@@ -374,7 +420,7 @@ function TripRow({ trip, members, currentUserId, onEdit, onSettle, onDelete }: {
   </article>;
 }
 
-function ModalWindow({ modal, close, members, group, user, editingTrip, supabaseEnabled, onAdd, onCreate, onJoin, onSignIn }: { modal: Exclude<Modal, null>; close: () => void; members: Member[]; group: RideGroup | null; user: AuthUser; editingTrip: Trip | null; supabaseEnabled: boolean; onAdd: (event: FormEvent<HTMLFormElement>) => Promise<void>; onCreate: (name: string, person: string) => Promise<void>; onJoin: (code: string, person: string) => Promise<void>; onSignIn: () => Promise<void> }) {
+function ModalWindow({ modal, close, members, group, user, editingTrip, supabaseEnabled, notify, onAdd, onCreate, onJoin, onSignIn }: { modal: Exclude<Modal, null>; close: () => void; members: Member[]; group: RideGroup | null; user: AuthUser; editingTrip: Trip | null; supabaseEnabled: boolean; notify: (message: string, type?: "success" | "error" | "info") => void; onAdd: (event: FormEvent<HTMLFormElement>) => Promise<void>; onCreate: (name: string, person: string) => Promise<void>; onJoin: (code: string, person: string) => Promise<void>; onSignIn: () => Promise<void> }) {
   const now = new Date();
   const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   const tripDate = editingTrip ? new Date(new Date(editingTrip.ride_at).getTime() - new Date(editingTrip.ride_at).getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : localTime;
@@ -382,11 +428,11 @@ function ModalWindow({ modal, close, members, group, user, editingTrip, supabase
 
   return <div className="modal-backdrop" role="presentation" onMouseDown={close}><section className="modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
     <button className="modal-close" aria-label="Close" onClick={close}>×</button>
-    {(modal === "add" || modal === "edit") && <><div className="eyebrow">{editingTrip ? "Edit Uber ride" : "New Uber ride"}</div><h2>{editingTrip ? "Update the details." : "Add the details."}</h2><p className="modal-copy">Track shared rides, solo rides, and every total.</p><form onSubmit={onAdd} className="form-stack"><label>Ride cost <div className="amount-field"><span>EGP</span><input name="amount" type="number" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" min="1" step="0.01" autoFocus required placeholder="0" defaultValue={editingTrip?.amount} /></div></label><div className="form-columns"><label>Direction<ChoiceButtons name="direction" value={editingTrip?.direction ?? "campus"} options={[{ value: "campus", label: "To campus" }, { value: "home", label: "Back home" }]} /></label><label>Trip type<ChoiceButtons name="tripMode" value={tripMode} onChange={(val) => setTripMode(val as Trip["trip_mode"])} options={[{ value: "shared", label: "Shared" }, { value: "solo", label: "Solo" }]} /></label></div><div className={`form-columns ${tripMode === "solo" ? "two-col" : "single-col"}`}><label>Paid by<ChoiceButtons name="paidBy" value={editingTrip?.paid_by ?? user?.id ?? "omar"} options={members.map((member) => ({ value: member.user_id, label: member.display_name }))} /></label>{tripMode === "solo" && <label>Solo rider<ChoiceButtons name="soloBy" value={editingTrip?.solo_by ?? user?.id ?? "omar"} options={members.map((member) => ({ value: member.user_id, label: member.display_name }))} /></label>}</div><label>When<input name="rideAt" type="datetime-local" required defaultValue={tripDate} /></label><label>Note <input name="notes" maxLength={280} placeholder="Optional" defaultValue={editingTrip?.notes ?? ""} /></label><button className="primary full" type="submit">{editingTrip ? "Save changes" : "Save trip"}</button></form></>}
+    {(modal === "add" || modal === "edit") && <><div className="eyebrow">{editingTrip ? "Edit Uber ride" : "New Uber ride"}</div><h2>{editingTrip ? "Update the details." : "Add the details."}</h2><p className="modal-copy">Track shared rides, solo rides, and every total.</p><form onSubmit={onAdd} className="form-stack"><label>Ride cost <div className="amount-field"><span>EGP</span><input name="amount" type="number" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" min="1" step="0.01" autoFocus required placeholder="0" defaultValue={editingTrip?.amount} /></div></label><div className="form-columns"><label>Direction<ChoiceButtons name="direction" value={editingTrip?.direction ?? "campus"} options={[{ value: "campus", label: "To campus" }, { value: "home", label: "Back home" }]} /></label><label>Trip type<ChoiceButtons name="tripMode" value={tripMode} onChange={(val) => setTripMode(val as Trip["trip_mode"])} options={[{ value: "shared", label: "Shared" }, { value: "solo", label: "Solo" }]} /></label></div><div className={`form-columns ${tripMode === "solo" ? "two-col" : "single-col"}`}><label>Paid by<ChoiceButtons name="paidBy" value={editingTrip?.paid_by ?? user?.id ?? "omar"} options={members.map((member) => ({ value: member.user_id, label: member.display_name }))} /></label><div className={`solo-rider-animator ${tripMode === "solo" ? "open" : "closed"}`}><label>Solo rider<ChoiceButtons name="soloBy" value={editingTrip?.solo_by ?? user?.id ?? "omar"} options={members.map((member) => ({ value: member.user_id, label: member.display_name }))} /></label></div></div><label>When<input name="rideAt" type="datetime-local" required defaultValue={tripDate} /></label><label>Note <input name="notes" maxLength={280} placeholder="Optional" defaultValue={editingTrip?.notes ?? ""} /></label><button className="primary full" type="submit">{editingTrip ? "Save changes" : "Save trip"}</button></form></>}
     {modal === "sign-in" && <><div className="eyebrow">Private Ridewise space</div><h2>Sign in with Google.</h2><p className="modal-copy">Ridewise is restricted to Omar and Khaled. Use the approved Google account to continue.</p><button className="primary full" onClick={() => void onSignIn()}>Continue with Google</button></>}
     {modal === "create-space" && <><div className="eyebrow">First things first</div><h2>Make your shared space.</h2><p className="modal-copy">You’ll get an invite code to send Khaled when it’s ready.</p><form className="form-stack" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void onCreate(String(data.get("space")), String(data.get("name"))); }}><label>Space name<input name="space" autoFocus required defaultValue="Omar + Khaled" /></label><label>Your name<input name="name" required defaultValue={user?.email?.split("@")[0] ?? ""} /></label><button className="primary full" type="submit">Create space</button></form></>}
     {modal === "join-space" && <><div className="eyebrow">Your friend invited you</div><h2>Join the ride ledger.</h2><form className="form-stack" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void onJoin(String(data.get("code")), String(data.get("name"))); }}><label>Invite code<input name="code" autoFocus required placeholder="RIDE2026" /></label><label>Your name<input name="name" required defaultValue={user?.email?.split("@")[0] ?? ""} /></label><button className="primary full" type="submit">Join shared space</button></form></>}
-    {modal === "share" && group && <><div className="eyebrow">Your shared space is ready</div><h2>Invite your co-pilot.</h2><p className="modal-copy">Send this code to your friend. They sign in, choose “Join with a code,” and both of you will see the same ledger.</p><div className="invite-code">{group.invite_code}</div><button className="primary full" onClick={() => { void navigator.clipboard.writeText(group.invite_code); }}>Copy invite code</button><p className="modal-footnote">{supabaseEnabled ? "Only people with this code can join." : "This preview code becomes real after Supabase is connected."}</p></>}
+    {modal === "share" && group && <><div className="eyebrow">Your shared space is ready</div><h2>Invite your co-pilot.</h2><p className="modal-copy">Send this code to your friend. They sign in, choose “Join with a code,” and both of you will see the same ledger.</p><div className="invite-code">{group.invite_code}</div><button className="primary full" onClick={() => { void navigator.clipboard.writeText(group.invite_code); notify("Invite code copied to clipboard!", "success"); }}>Copy invite code</button><p className="modal-footnote">{supabaseEnabled ? "Only people with this code can join." : "This preview code becomes real after Supabase is connected."}</p></>}
   </section></div>;
 }
 
