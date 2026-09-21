@@ -950,7 +950,21 @@ export default function Home() {
               <section className="monthly-runrate-card">
                 <div className="section-header-row" style={{ margin: 0 }}>
                   <h4 className="trend-chart-title">Monthly Commute Projection</h4>
-                  <span className="section-header-meta">Avg weekly × 4</span>
+                  <span className="section-header-meta">Logged days avg × 4 × 4</span>
+                </div>
+
+                {/* Prominent Average Spending Number Display */}
+                <div className="monthly-runrate-hero">
+                  <div className="monthly-runrate-hero-left">
+                    <span className="monthly-runrate-hero-label">Projected Average Monthly Spend</span>
+                    <strong className="monthly-runrate-hero-val">{money.format(analytics.monthlyMetrics.expectedMonthlySpend)}</strong>
+                    <span className="monthly-runrate-hero-sub">
+                      {analytics.monthlyMetrics.loggedDaysCount > 0
+                        ? `Avg ${money.format(analytics.monthlyMetrics.averageSpendPerDay)}/day across ${analytics.monthlyMetrics.loggedDaysCount} logged ${analytics.monthlyMetrics.loggedDaysCount === 1 ? "day" : "days"} × 16`
+                        : "No logged days yet"}
+                    </span>
+                  </div>
+                  <span className="monthly-pacing-tag">Avg × 16</span>
                 </div>
 
                 {/* 3 Comparison Cards: Current Monthly Spend vs Expected vs Budget Limit */}
@@ -961,9 +975,9 @@ export default function Home() {
                     <span className="monthly-compare-sub">Personal spend</span>
                   </div>
                   <div className="monthly-compare-card">
-                    <span className="monthly-compare-label">Expected</span>
+                    <span className="monthly-compare-label">Expected Avg</span>
                     <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.expectedMonthlySpend)}</strong>
-                    <span className="monthly-compare-sub">College days pacing</span>
+                    <span className="monthly-compare-sub">Logged days × 16</span>
                   </div>
                   <div className="monthly-compare-card">
                     <span className="monthly-compare-label">Budget Limit</span>
@@ -972,37 +986,47 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* Progress bar vs Monthly Budget Limit */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  <div className="bus-member-progress-track">
+                {/* Progress Bar to Budget Limit with Average Spending Dotted Line Marker */}
+                <div className="monthly-progress-wrap">
+                  <div className="monthly-progress-track">
+                    {/* Current spending fill with dynamic color: green -> yellow after expected -> red near budget */}
                     <div
-                      className="bus-member-progress-fill"
+                      className={`monthly-progress-fill ${analytics.monthlyMetrics.statusColor}`}
                       style={{
                         width: `${Math.min(100, analytics.monthlyMetrics.pctOfLimit)}%`,
-                        background: analytics.monthlyMetrics.pctOfLimit > 100 ? "var(--red)" : "var(--green)",
                       }}
                     />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)", fontFamily: "DM Mono, monospace" }}>
-                    <span>{analytics.monthlyMetrics.pctOfLimit.toFixed(0)}% of limit</span>
-                    <span style={{ color: analytics.monthlyMetrics.diffFromLimit < 0 ? "var(--red)" : "var(--green)", fontWeight: 600 }}>
-                      {analytics.monthlyMetrics.diffFromLimit >= 0
-                        ? `${money.format(analytics.monthlyMetrics.diffFromLimit)} remaining`
-                        : `${money.format(Math.abs(analytics.monthlyMetrics.diffFromLimit))} over limit`}
-                    </span>
-                  </div>
-                </div>
 
-                {/* Run Rate & Weekly Avg */}
-                <div className="monthly-runrate-hero">
-                  <div className="monthly-runrate-hero-left">
-                    <span className="monthly-runrate-hero-label">Weekly Avg → Monthly Projection (× 4)</span>
-                    <strong className="monthly-runrate-hero-val">{money.format(analytics.monthlyMetrics.averageMonthlySpend)}</strong>
-                    <span className="monthly-runrate-hero-sub">
-                      Based on {money.format(analytics.monthlyMetrics.averageWeeklySpend)}/wk personal average
+                    {/* Dotted Line where the average spending number lies in the progress bar */}
+                    {analytics.monthlyMetrics.expectedMonthlySpend > 0 && analytics.monthlyMetrics.monthlyBudgetLimit > 0 && (
+                      <div
+                        className="monthly-dotted-marker"
+                        style={{
+                          left: `${Math.min(100, Math.max(0, analytics.monthlyMetrics.pctOfExpectedOnLimit))}%`,
+                        }}
+                        title={`Expected Monthly Avg: ${money.format(analytics.monthlyMetrics.expectedMonthlySpend)}`}
+                      >
+                        <div className="monthly-dotted-marker-tag">
+                          Avg {money.format(analytics.monthlyMetrics.expectedMonthlySpend)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Progress Bar Context Labels */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--muted)", fontFamily: "DM Mono, monospace", marginTop: "2px" }}>
+                    <span>
+                      Current: <b style={{ color: "var(--ink)" }}>{money.format(analytics.monthlyMetrics.currentMonthSpend)}</b> ({analytics.monthlyMetrics.pctOfLimit.toFixed(0)}%)
+                    </span>
+                    <span style={{ fontWeight: 700, color: analytics.monthlyMetrics.statusColor === "red" ? "var(--red)" : analytics.monthlyMetrics.statusColor === "yellow" ? "#d97706" : "var(--green)" }}>
+                      {analytics.monthlyMetrics.statusColor === "green" && "● Within expected avg"}
+                      {analytics.monthlyMetrics.statusColor === "yellow" && "▲ Above expected avg"}
+                      {analytics.monthlyMetrics.statusColor === "red" && "■ Near / over limit"}
+                    </span>
+                    <span>
+                      Limit: <b style={{ color: "var(--ink)" }}>{money.format(analytics.monthlyMetrics.monthlyBudgetLimit)}</b>
                     </span>
                   </div>
-                  <span className="monthly-pacing-tag">4× Weekly</span>
                 </div>
               </section>
 

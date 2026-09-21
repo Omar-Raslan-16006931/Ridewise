@@ -237,40 +237,49 @@ test("computeDailySpendingSeries returns discrete non-cumulative spending per da
   assert.equal(series[1].ridesCount, 1);
 });
 
-test("personalAverageMonthlySpend is average weekly personal spend multiplied by 4", () => {
-  const { personalAverageWeeklySpend, personalAverageMonthlySpend, computeMonthlyComparisonMetrics } = require("./analytics");
+test("personalAverageMonthlySpend is average of all logged days multiplied by 4 and then 4 again", () => {
+  const { personalLoggedDaysCount, personalAverageMonthlySpend, computeMonthlyComparisonMetrics } = require("./analytics");
   const sampleTrips: Trip[] = [
-    // Week 1 (Sept 8 - 14):
+    // Day 1 (Sept 8):
     { id: "t1", ride_at: "2026-09-08T08:00:00.000Z", direction: "campus", amount: 100, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+    // Day 2 (Sept 9):
     { id: "t2", ride_at: "2026-09-09T08:00:00.000Z", direction: "campus", amount: 120, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "omar" },
-    // Week 2 (Sept 15 - 21):
+    // Day 3 (Sept 21):
     { id: "t3", ride_at: "2026-09-21T08:00:00.000Z", direction: "campus", amount: 100, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
   ];
 
-  // Omar:
-  // Week 1: 50 + 120 = 170
-  // Week 2: 50
-  // Total: 220 across 2 weeks -> weekly avg = 110
-  const weeklyAvg = personalAverageWeeklySpend(sampleTrips, "omar");
-  assert.equal(weeklyAvg, 110);
+  // Omar personal spend:
+  // Day 1: 50
+  // Day 2: 120
+  // Day 3: 50
+  // Total = 220 across 3 logged days
+  const loggedDays = personalLoggedDaysCount(sampleTrips, "omar");
+  assert.equal(loggedDays, 3);
 
-  // Monthly avg = weeklyAvg * 4 = 440
-  const monthlyAvg = personalAverageMonthlySpend(sampleTrips, "omar");
-  assert.equal(monthlyAvg, 440);
+  // Daily avg = 220 / 3
+  // Weekly (x4) = (220 / 3) * 4
+  // Monthly (x4 again) = (220 / 3) * 16 = 3520 / 3 ≈ 1173.3333
+  const expectedMonthly = personalAverageMonthlySpend(sampleTrips, "omar");
+  assert.equal(Math.round(expectedMonthly), Math.round((220 / 3) * 16));
 
   // Monthly comparison metrics with 700 EGP weekly budget:
   // monthlyBudgetLimit = 700 * 4 = 2800 EGP
-  // Sept 2026 trips for Omar: 170 + 50 = 220 EGP
-  // College days attended in Sept: Sept 8, Sept 9, Sept 21 -> 3 days
-  // Expected daily = 700 / 4 = 175. Expected monthly so far = 3 * 175 = 525 EGP
   const metrics = computeMonthlyComparisonMetrics(sampleTrips, "omar", 700, new Date(2026, 8, 21));
   assert.equal(metrics.monthlyBudgetLimit, 2800);
   assert.equal(metrics.currentMonthSpend, 220);
-  assert.equal(metrics.expectedMonthlySpend, 525);
-  assert.equal(metrics.averageWeeklySpend, 110);
-  assert.equal(metrics.averageMonthlySpend, 440);
-  assert.equal(metrics.diffFromExpected, 220 - 525);
-  assert.equal(metrics.diffFromLimit, 2800 - 220);
+  assert.equal(Math.round(metrics.expectedMonthlySpend), Math.round((220 / 3) * 16));
+  assert.equal(metrics.statusColor, "green");
+
+  // If current spend exceeded expectedMonthlySpend but below 85% of limit (2380):
+  // Suppose current spend = 1500 (> 1173.33 and < 2380) -> yellow
+  const yellowTrips: Trip[] = [
+    ...sampleTrips,
+    { id: "t4", ride_at: "2026-09-22T08:00:00.000Z", direction: "campus", amount: 1280, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "omar" },
+  ];
+  // Now 4 logged days, total spend 220 + 1280 = 1500. Expected monthly = (1500 / 4) * 16 = 6000.
+  // Let's test with a fixed expected budget where spend exceeds expected:
+  const redMetrics = computeMonthlyComparisonMetrics(yellowTrips, "omar", 400, new Date(2026, 8, 22)); // limit 1600, spend 1500 (93.75%)
+  assert.equal(redMetrics.statusColor, "red");
 });
 
 

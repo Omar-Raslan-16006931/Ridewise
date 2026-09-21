@@ -624,29 +624,54 @@ export function personalAverageWeeklySpend(trips: Trip[], memberId: string): num
 }
 
 /**
+ * Counts unique days where a specific member logged a commute
+ * (either a shared ride, or their own solo ride).
+ */
+export function personalLoggedDaysCount(trips: Trip[], memberId: string): number {
+  if (!trips || trips.length === 0 || !memberId) return 0;
+  const personalTrips = trips.filter((t) => t.trip_mode === "shared" || t.solo_by === memberId);
+  const days = new Set<string>();
+  for (const t of personalTrips) {
+    days.add(toLocalDateKey(t.ride_at));
+  }
+  return days.size;
+}
+
+/**
  * Calculates estimated average monthly commute spending for a specific member only.
- * Defined strictly as: average weekly personal spend * 4.
+ * Defined strictly by taking average personal spending of all logged days then * 4 then * 4.
  */
 export function personalAverageMonthlySpend(trips: Trip[], memberId: string): number {
-  return personalAverageWeeklySpend(trips, memberId) * 4;
+  if (!trips || trips.length === 0 || !memberId) return 0;
+  const loggedDays = personalLoggedDaysCount(trips, memberId);
+  if (loggedDays === 0) return 0;
+  const totalPersonalSpend = personalTotal(trips, memberId);
+  const avgPerDay = totalPersonalSpend / loggedDays;
+  return avgPerDay * 4 * 4;
 }
 
 export type MonthlyComparisonMetrics = {
   currentMonthSpend: number;
   expectedMonthlySpend: number;
   monthlyBudgetLimit: number;
+  averageSpendPerDay: number;
   averageWeeklySpend: number;
   averageMonthlySpend: number;
   diffFromExpected: number;
   diffFromLimit: number;
   pctOfLimit: number;
+  pctOfExpectedOnLimit: number;
+  loggedDaysCount: number;
+  statusColor: "green" | "yellow" | "red";
 };
 
 /**
  * Computes:
  * 1. Current monthly spending (personal spend in the current calendar month)
- * 2. Expected monthly spending (college days elapsed this month * daily budget)
+ * 2. Expected monthly spending (average spend of all logged days * 4 * 4)
  * 3. Budget limit (weeklyBudget * 4)
+ * 4. Pct where expected lies on the limit progress bar (for dotted line)
+ * 5. Dynamic status color (green -> yellow after expected -> red near budget)
  */
 export function computeMonthlyComparisonMetrics(
   trips: Trip[],
@@ -654,9 +679,15 @@ export function computeMonthlyComparisonMetrics(
   weeklyBudget: number,
   now = new Date()
 ): MonthlyComparisonMetrics {
-  const averageWeeklySpend = personalAverageWeeklySpend(trips, memberId);
-  const averageMonthlySpend = averageWeeklySpend * 4;
   const monthlyBudgetLimit = (weeklyBudget || 0) * 4;
+  const loggedDaysCount = personalLoggedDaysCount(trips, memberId);
+  const totalPersonalSpend = personalTotal(trips, memberId);
+
+  // Average of all logged days then x4 (weekly) then x4 (monthly)
+  const averageSpendPerDay = loggedDaysCount > 0 ? totalPersonalSpend / loggedDaysCount : 0;
+  const averageWeeklySpend = averageSpendPerDay * 4;
+  const expectedMonthlySpend = averageSpendPerDay * 4 * 4;
+  const averageMonthlySpend = expectedMonthlySpend;
 
   const currentYear = now.getFullYear();
   const currentMonth = now.getMonth();
@@ -666,27 +697,34 @@ export function computeMonthlyComparisonMetrics(
   });
 
   const currentMonthSpend = personalTotal(currentMonthTrips, memberId);
-  const collegeDaysSoFar = personalCollegeDaysUsed(currentMonthTrips, memberId);
-  const dailyBudgetVal = dailyBudget(weeklyBudget, EXPECTED_COLLEGE_DAYS);
-
-  // Expected spend: college days attended so far this month * daily budget
-  const expectedMonthlySpend = collegeDaysSoFar > 0
-    ? collegeDaysSoFar * dailyBudgetVal
-    : dailyBudgetVal;
-
   const diffFromExpected = currentMonthSpend - expectedMonthlySpend;
   const diffFromLimit = monthlyBudgetLimit - currentMonthSpend;
   const pctOfLimit = monthlyBudgetLimit > 0 ? (currentMonthSpend / monthlyBudgetLimit) * 100 : 0;
+  const pctOfExpectedOnLimit = monthlyBudgetLimit > 0 ? (expectedMonthlySpend / monthlyBudgetLimit) * 100 : 0;
+
+  // Status color: green, yellow after expected, red near budget (>= 85% of limit or over)
+  let statusColor: "green" | "yellow" | "red" = "green";
+  if (monthlyBudgetLimit > 0 && currentMonthSpend >= monthlyBudgetLimit * 0.85) {
+    statusColor = "red";
+  } else if (expectedMonthlySpend > 0 && currentMonthSpend > expectedMonthlySpend) {
+    statusColor = "yellow";
+  } else {
+    statusColor = "green";
+  }
 
   return {
     currentMonthSpend,
     expectedMonthlySpend,
     monthlyBudgetLimit,
+    averageSpendPerDay,
     averageWeeklySpend,
     averageMonthlySpend,
     diffFromExpected,
     diffFromLimit,
     pctOfLimit,
+    pctOfExpectedOnLimit,
+    loggedDaysCount,
+    statusColor,
   };
 }
 
