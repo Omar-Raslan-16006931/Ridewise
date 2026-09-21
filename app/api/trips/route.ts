@@ -50,46 +50,92 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  if (!hasValidApiKey(request)) return unauthorized();
-
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!supabaseUrl || !serviceRoleKey) {
-    return NextResponse.json({ error: "Shortcut API is not configured on the server" }, { status: 503 });
+    return NextResponse.json({ error: "Supabase is not configured on the server" }, { status: 503 });
   }
 
-  let body: TripRequest;
+  let body: any;
   try {
-    body = (await request.json()) as TripRequest;
+    body = (await request.json()) as any;
   } catch {
     return NextResponse.json({ error: "Request body must be valid JSON" }, { status: 400 });
   }
 
-  const amount = Number(body.amount);
-  const direction = String(body.direction ?? "home");
-  const tripMode = String(body.trip_mode ?? body.mode ?? "shared");
-  const shortcutUserId = process.env.RIDEWISE_SHORTCUT_USER_ID;
-  const groupId = String(body.group_id ?? process.env.RIDEWISE_SHORTCUT_GROUP_ID ?? "");
-  const riderId = String(body.solo_by ?? body.rider ?? (tripMode === "solo" ? shortcutUserId ?? "" : ""));
-  const payerId = String(body.paid_by ?? (tripMode === "solo" ? riderId : shortcutUserId ?? ""));
-  const createdBy = String(body.created_by ?? shortcutUserId ?? payerId);
-  const notes = body.notes == null ? null : String(body.notes).trim();
-  const rideAt = body.ride_at ? new Date(String(body.ride_at)) : new Date();
+  const hasApiKey = hasValidApiKey(request);
+  const groupCode = String(body.group_code ?? request.headers.get("x-ridewise-group-code") ?? "").trim().toUpperCase();
 
-  if (!Number.isFinite(amount) || amount <= 0 || amount >= 100000) return NextResponse.json({ error: "amount must be between 0 and 100000" }, { status: 400 });
-  if (!directions.has(direction)) return NextResponse.json({ error: "direction must be campus or home" }, { status: 400 });
-  if (!tripModes.has(tripMode)) return NextResponse.json({ error: "mode must be shared or solo" }, { status: 400 });
-  if (!groupId || !createdBy || !payerId || (tripMode === "solo" && !riderId)) return NextResponse.json({ error: "group_id, created_by, paid_by, and solo rider are required" }, { status: 400 });
-  if (notes && notes.length > 280) return NextResponse.json({ error: "notes must be 280 characters or fewer" }, { status: 400 });
-  if (Number.isNaN(rideAt.getTime())) return NextResponse.json({ error: "ride_at must be a valid ISO timestamp" }, { status: 400 });
+  if (!hasApiKey && !groupCode) {
+    return unauthorized();
+  }
 
   const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
-  const { data: members, error: membersError } = await supabase.from("ride_group_members").select("user_id").eq("group_id", groupId);
-  if (membersError) return NextResponse.json({ error: membersError.message }, { status: 500 });
-  const memberIds = new Set((members ?? []).map((member) => member.user_id));
-  if (!memberIds.has(createdBy) || !memberIds.has(payerId) || (tripMode === "solo" && !memberIds.has(riderId))) {
-    return NextResponse.json({ error: "All trip users must belong to the ride group" }, { status: 400 });
+
+  let groupId = String(body.group_id ?? process.env.RIDEWISE_SHORTCUT_GROUP_ID ?? "");
+  if (!groupId && groupCode) {
+    const { data: groupData, error: groupErr } = await supabase
+      .from("ride_groups")
+      .select("id")
+      .eq("invite_code", groupCode)
+      .maybeSingle();
+
+    if (groupErr || !groupData) {
+      return NextResponse.json({ error: "Invalid group code" }, { status: 401 });
+    }
+    groupId = groupData.id;
   }
+
+  if (!groupId) {
+    return NextResponse.json({ error: "group_id or group_code is required" }, { status: 400 });
+  }
+
+  // Fetch members to resolve payer name / IDs
+  const { data: members, error: membersError } = await supabase
+    .from("ride_group_members")
+    .select("user_id,display_name")
+    .eq("group_id", groupId);
+
+  if (membersError || !members || members.length === 0) {
+    return NextResponse.json({ error: "Group members not found" }, { status: 404 });
+  }
+
+  const amount = Number(body.amount);
+  if (!Number.isFinite(amount) || amount <= 0 || amount >= 100000) {
+    return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 });
+  }
+
+  // Direction: campus or home (default by time of day)
+  let direction = String(body.direction ?? "").toLowerCase().trim();
+  if (!directions.has(direction)) {
+    direction = new Date().getHours() < 13 ? "campus" : "home";
+  }
+
+  // Mode: shared or solo
+  const tripMode = String(body.trip_mode ?? body.mode ?? "shared").toLowerCase().trim();
+  if (!tripModes.has(tripMode)) {
+    return NextResponse.json({ error: "mode must be shared or solo" }, { status: 400 });
+  }
+
+  // Resolve payer by ID or display name
+  const rawPayer = String(body.paid_by ?? body.rider ?? "").trim();
+  let matchedMember = members.find(
+    (m) => m.user_id === rawPayer || m.display_name.toLowerCase() === rawPayer.toLowerCase()
+  );
+
+  if (!matchedMember && members.length > 0) {
+    matchedMember = members[0];
+  }
+
+  if (!matchedMember) {
+    return NextResponse.json({ error: "Valid payer member required" }, { status: 400 });
+  }
+
+  const payerId = matchedMember.user_id;
+  const riderId = tripMode === "solo" ? payerId : null;
+  const createdBy = payerId;
+  const notes = body.notes ? String(body.notes).trim().slice(0, 280) : "Logged via iOS Shortcut";
+  const rideAt = body.ride_at ? new Date(String(body.ride_at)) : new Date();
 
   const { data: trip, error } = await supabase.from("ride_trips").insert({
     group_id: groupId,
@@ -97,12 +143,12 @@ export async function POST(request: Request) {
     direction,
     amount,
     trip_mode: tripMode,
-    solo_by: tripMode === "solo" ? riderId : null,
+    solo_by: riderId,
     paid_by: payerId,
     created_by: createdBy,
     notes,
   }).select("id,group_id,ride_at,direction,amount,trip_mode,solo_by,paid_by,created_by,notes").single();
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-  return NextResponse.json({ trip }, { status: 201 });
+  return NextResponse.json({ success: true, trip }, { status: 201 });
 }

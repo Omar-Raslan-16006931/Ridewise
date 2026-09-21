@@ -53,7 +53,7 @@ const demoTrips: Trip[] = [
 ];
 
 type Tab = "rides" | "budget" | "trends" | "space";
-type Modal = "add" | "edit" | "sign-in" | "create-space" | "join-space" | "share" | "budget" | null;
+type Modal = "add" | "edit" | "sign-in" | "create-space" | "join-space" | "share" | "budget" | "shortcut" | null;
 type AuthUser = { id: string; email?: string } | null;
 type TimeHorizon = "week" | "4weeks" | "3months" | "lifetime";
 
@@ -77,10 +77,31 @@ export default function Home() {
   // Tab State - starts fresh on 'rides' on app open
   const [activeTab, setActiveTab] = useState<Tab>("rides");
 
+  const [shortcutPreFill, setShortcutPreFill] = useState<{ amount?: string; mode?: "shared" | "solo"; paidBy?: string } | null>(null);
+
   useEffect(() => {
     try {
       localStorage.removeItem("ridewise_active_tab");
     } catch {}
+
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const isShortcut = params.get("shortcut") === "1" || params.get("log") === "1";
+      const amt = params.get("amount");
+      const mode = params.get("mode") || params.get("trip_mode");
+      const paid = params.get("paid_by") || params.get("payer");
+
+      if (isShortcut || amt) {
+        setShortcutPreFill({
+          amount: amt ?? undefined,
+          mode: mode === "solo" ? "solo" : mode === "shared" ? "shared" : undefined,
+          paidBy: paid ?? undefined,
+        });
+        setModal("add");
+        const newUrl = window.location.pathname;
+        window.history.replaceState({}, "", newUrl);
+      }
+    }
   }, []);
 
   // Persistent User, Group, Members, and Trips State
@@ -1089,9 +1110,7 @@ export default function Home() {
                 <div className="trio-card">
                   <span className="trio-label">Shared Only</span>
                   <strong className="trio-value">{money.format(analytics.sharedSpendVal)}</strong>
-                  <small className="trio-sub">
-                    {analytics.sharedRidesCount} rides · + mine solo ({money.format(analytics.mySoloSpend)})
-                  </small>
+                  <small className="trio-sub">{analytics.sharedRidesCount} rides</small>
                 </div>
               </div>
 
@@ -1456,6 +1475,21 @@ export default function Home() {
                   <span style={{ color: "var(--muted)" }}>›</span>
                 </button>
 
+                <button
+                  type="button"
+                  className="settings-item-btn"
+                  onClick={() => setModal("shortcut")}
+                >
+                  <div className="settings-item-title">
+                    <span>⚡</span>
+                    <div>
+                      <div>Add iOS Shortcut</div>
+                      <span className="settings-item-sub">Log rides via Siri / Home Screen (Amount, Mode, Payer)</span>
+                    </div>
+                  </div>
+                  <span style={{ color: "var(--muted)" }}>›</span>
+                </button>
+
                 {supabase && user && (
                   <button
                     type="button"
@@ -1567,11 +1601,12 @@ export default function Home() {
       {modal && (
         <BottomSheetWindow
           modal={modal}
-          close={() => { setModal(null); setEditingTrip(null); }}
+          close={() => { setModal(null); setEditingTrip(null); setShortcutPreFill(null); }}
           members={members}
           group={group}
           user={user}
           editingTrip={editingTrip}
+          shortcutPreFill={shortcutPreFill}
           supabaseEnabled={Boolean(supabase)}
           notify={notify}
           weeklyBudget={weeklyBudget}
@@ -1615,6 +1650,7 @@ function BottomSheetWindow({
   group,
   user,
   editingTrip,
+  shortcutPreFill,
   supabaseEnabled,
   notify,
   weeklyBudget,
@@ -1630,6 +1666,7 @@ function BottomSheetWindow({
   group: RideGroup | null;
   user: AuthUser;
   editingTrip: Trip | null;
+  shortcutPreFill?: { amount?: string; mode?: "shared" | "solo"; paidBy?: string } | null;
   supabaseEnabled: boolean;
   notify: (message: string, type?: "success" | "error" | "info") => void;
   weeklyBudget: number;
@@ -1645,11 +1682,29 @@ function BottomSheetWindow({
     ? new Date(new Date(editingTrip.ride_at).getTime() - new Date(editingTrip.ride_at).getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
     : localTime;
 
-  const [tripMode, setTripMode] = useState<Trip["trip_mode"]>(editingTrip?.trip_mode ?? "shared");
-  const [direction, setDirection] = useState<Trip["direction"]>(editingTrip?.direction ?? "campus");
-  const [amount, setAmount] = useState<string>(editingTrip ? String(editingTrip.amount) : "");
-  const [paidBy, setPaidBy] = useState<string>(editingTrip?.paid_by ?? user?.id ?? members[0]?.user_id ?? "omar");
-  const [soloBy, setSoloBy] = useState<string>(editingTrip?.solo_by ?? user?.id ?? members[0]?.user_id ?? "omar");
+  const matchedPayer = shortcutPreFill?.paidBy
+    ? members.find(
+        (m) =>
+          m.user_id === shortcutPreFill.paidBy ||
+          m.display_name.toLowerCase() === shortcutPreFill.paidBy?.toLowerCase()
+      )?.user_id
+    : undefined;
+
+  const [tripMode, setTripMode] = useState<Trip["trip_mode"]>(
+    editingTrip?.trip_mode ?? shortcutPreFill?.mode ?? "shared"
+  );
+  const [direction, setDirection] = useState<Trip["direction"]>(
+    editingTrip?.direction ?? (now.getHours() < 13 ? "campus" : "home")
+  );
+  const [amount, setAmount] = useState<string>(
+    editingTrip ? String(editingTrip.amount) : shortcutPreFill?.amount ? String(shortcutPreFill.amount) : ""
+  );
+  const [paidBy, setPaidBy] = useState<string>(
+    editingTrip?.paid_by ?? matchedPayer ?? user?.id ?? members[0]?.user_id ?? "omar"
+  );
+  const [soloBy, setSoloBy] = useState<string>(
+    editingTrip?.solo_by ?? matchedPayer ?? user?.id ?? members[0]?.user_id ?? "omar"
+  );
   const [closing, setClosing] = useState(false);
 
   function handleClose() {
@@ -1689,6 +1744,7 @@ function BottomSheetWindow({
             {modal === "add" && "Log ride"}
             {modal === "edit" && "Edit ride"}
             {modal === "budget" && "Set weekly budget"}
+            {modal === "shortcut" && "iOS Shortcut Setup"}
             {modal === "sign-in" && "Sign in with Google"}
             {modal === "create-space" && "Create shared space"}
             {modal === "join-space" && "Join shared space"}
@@ -1939,6 +1995,111 @@ function BottomSheetWindow({
                 }}
               >
                 Copy
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* IOS SHORTCUT SETUP */}
+        {modal === "shortcut" && (
+          <div className="sheet-form" style={{ gap: "16px" }}>
+            <div style={{ background: "rgba(37, 99, 235, 0.08)", border: "1px solid rgba(37, 99, 235, 0.2)", borderRadius: "16px", padding: "14px" }}>
+              <div style={{ fontWeight: 600, fontSize: "14px", marginBottom: "6px", color: "var(--foreground)", display: "flex", alignItems: "center", gap: "6px" }}>
+                <span>⚡</span> 3 Inputs Required
+              </div>
+              <p style={{ fontSize: "12px", color: "var(--muted)", margin: "0 0 8px 0", lineHeight: 1.4 }}>
+                Your iOS shortcut will ask for these 3 values every commute:
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", background: "var(--surface)", padding: "8px 10px", borderRadius: "8px" }}>
+                  <span style={{ fontWeight: 700, color: "var(--accent)" }}>1. Amount</span>
+                  <span style={{ color: "var(--muted)" }}>— Fare in EGP (Number input, e.g. 120)</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", background: "var(--surface)", padding: "8px 10px", borderRadius: "8px" }}>
+                  <span style={{ fontWeight: 700, color: "var(--accent)" }}>2. Shared or Solo</span>
+                  <span style={{ color: "var(--muted)" }}>— Choose from menu: Shared or Solo</span>
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "8px", fontSize: "12px", background: "var(--surface)", padding: "8px 10px", borderRadius: "8px" }}>
+                  <span style={{ fontWeight: 700, color: "var(--accent)" }}>3. Who Paid</span>
+                  <span style={{ color: "var(--muted)" }}>— Choose: {members.map((m) => m.display_name).join(" or ") || "Omar or Khaled"}</span>
+                </div>
+              </div>
+            </div>
+
+            <a
+              href="shortcuts://"
+              className="sheet-submit-btn"
+              style={{ textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+            >
+              <span>Open Apple Shortcuts App</span>
+              <span>↗</span>
+            </a>
+
+            {/* Webhook Configuration */}
+            <div style={{ background: "var(--surface-container)", borderRadius: "16px", padding: "14px", border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px", color: "var(--foreground)" }}>
+                Fast Background Webhook (Siri & Lock Screen)
+              </div>
+              <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+                In Shortcuts, add "Get Contents of URL" to log trips instantly without opening a browser:
+              </p>
+              
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface)", padding: "6px 10px", borderRadius: "8px", fontSize: "11px" }}>
+                  <span style={{ color: "var(--muted)" }}>Method:</span>
+                  <strong style={{ color: "var(--accent)" }}>POST</strong>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface)", padding: "6px 10px", borderRadius: "8px", fontSize: "11px" }}>
+                  <span style={{ color: "var(--muted)" }}>URL:</span>
+                  <span style={{ fontFamily: "monospace", fontSize: "10px", wordBreak: "break-all" }}>
+                    {typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", background: "var(--surface)", padding: "6px 10px", borderRadius: "8px", fontSize: "11px" }}>
+                  <span style={{ color: "var(--muted)" }}>Group Code:</span>
+                  <strong style={{ fontFamily: "monospace" }}>{group?.invite_code || "RIDE2026"}</strong>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="copy-code-btn"
+                style={{ width: "100%", marginTop: "10px" }}
+                onClick={() => {
+                  const samplePayload = {
+                    group_code: group?.invite_code || "RIDE2026",
+                    amount: 120,
+                    trip_mode: "shared",
+                    paid_by: members[0]?.display_name || "Omar",
+                  };
+                  void navigator.clipboard.writeText(JSON.stringify(samplePayload, null, 2));
+                  notify("Sample JSON copied to clipboard!", "success");
+                }}
+              >
+                📋 Copy Sample JSON Body
+              </button>
+            </div>
+
+            {/* Quick Web Link */}
+            <div style={{ background: "var(--surface-container)", borderRadius: "16px", padding: "14px", border: "1px solid var(--border)" }}>
+              <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px", color: "var(--foreground)" }}>
+                Option 2: Direct App Launcher Link
+              </div>
+              <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+                Or use "Open URLs" in Shortcuts to launch Ridewise with pre-filled inputs:
+              </p>
+              <button
+                type="button"
+                className="copy-code-btn"
+                style={{ width: "100%" }}
+                onClick={() => {
+                  const origin = typeof window !== "undefined" ? window.location.origin : "https://ridewise.vercel.app";
+                  const sampleUrl = `${origin}/?shortcut=1&amount=120&mode=shared&paid_by=${encodeURIComponent(members[0]?.display_name || "Omar")}`;
+                  void navigator.clipboard.writeText(sampleUrl);
+                  notify("Launcher URL copied to clipboard!", "success");
+                }}
+              >
+                📋 Copy Shortcut Launcher URL
               </button>
             </div>
           </div>
