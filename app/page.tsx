@@ -380,6 +380,8 @@ export default function Home() {
     const soloSpendVal = scopedSoloTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const soloRidesCount = scopedSoloTrips.length;
     const soloAvgCost = soloRidesCount > 0 ? soloSpendVal / soloRidesCount : 0;
+    const mySoloTrips = filterSoloTrips(horizonTrips, "mine", currentUserId);
+    const mySoloSpend = mySoloTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const sharedSpendVal = sharedTotal(horizonTrips);
     const sharedRidesCount = horizonTrips.filter((t) => t.trip_mode === "shared").length;
     const sharedAvgCost = sharedRidesCount > 0 ? sharedSpendVal / sharedRidesCount : 0;
@@ -457,6 +459,7 @@ export default function Home() {
       dailyMaxSpend,
       matrix,
       soloSpendVal,
+      mySoloSpend,
       sharedSpendVal,
       soloRidesCount,
       sharedRidesCount,
@@ -1076,7 +1079,7 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* Trio KPI Cards: Total Spent, Shared Only, Solo Only */}
+              {/* Summary Cards: Total Spent & Shared Only */}
               <div className="analytics-summary-trio">
                 <div className="trio-card primary-trio">
                   <span className="trio-label">Total Spent</span>
@@ -1086,12 +1089,9 @@ export default function Home() {
                 <div className="trio-card">
                   <span className="trio-label">Shared Only</span>
                   <strong className="trio-value">{money.format(analytics.sharedSpendVal)}</strong>
-                  <small className="trio-sub">{analytics.sharedRidesCount} rides</small>
-                </div>
-                <div className="trio-card">
-                  <span className="trio-label">Solo ({soloScope === "mine" ? "Mine" : soloScope === "others" ? "Other's" : "All"})</span>
-                  <strong className="trio-value">{money.format(analytics.soloSpendVal)}</strong>
-                  <small className="trio-sub">{analytics.soloRidesCount} rides</small>
+                  <small className="trio-sub">
+                    {analytics.sharedRidesCount} rides · + mine solo ({money.format(analytics.mySoloSpend)})
+                  </small>
                 </div>
               </div>
 

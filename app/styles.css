@@ -1288,8 +1288,8 @@ button {
    ======================================================== */
 .analytics-summary-trio {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
   width: 100%;
 }
 
@@ -1297,10 +1297,10 @@ button {
   background: var(--cream);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 8px 6px;
+  padding: 12px 10px;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
   overflow: hidden;
 }
@@ -1313,9 +1313,9 @@ button {
 
 .trio-label {
   font-family: "DM Mono", monospace;
-  font-size: 8px;
+  font-size: 9.5px;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
   color: var(--muted);
   font-weight: 700;
   white-space: nowrap;
@@ -1327,9 +1327,9 @@ button {
 }
 
 .trio-value {
-  font-size: 12.5px;
-  font-weight: 700;
-  letter-spacing: -0.3px;
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
   color: var(--ink);
   margin-top: auto;
   white-space: nowrap;
@@ -1342,7 +1342,7 @@ button {
 }
 
 .trio-sub {
-  font-size: 8.5px;
+  font-size: 9.5px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1354,7 +1354,7 @@ button {
 
 @media (max-width: 375px) {
   .trio-value {
-    font-size: 11.5px;
+    font-size: 14.5px;
   }
 }
 
