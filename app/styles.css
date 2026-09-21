@@ -28,7 +28,157 @@ h1 { max-width: 680px; margin: 17px 0 14px; font-size: clamp(42px, 5.5vw, 78px);
 .add-button b { font-size: 22px; line-height: 0; vertical-align: -2px; margin-right: 5px; font-weight: 400; }
 .notice { display: flex; justify-content: space-between; align-items: center; gap: 15px; margin: 22px 0 0; padding: 12px 16px; background: #e3f4c3; border-radius: 5px; font-size: 13px; }.notice button { border: 0; background: none; color: var(--ink); text-decoration: underline; font-size: 12px; }
 .stat-grid { display: grid; grid-template-columns: 1.25fr 1fr 1fr 1.1fr; border-bottom: 1px solid var(--line); }.stat-card { min-height: 192px; padding: 29px 25px; border-left: 1px solid var(--line); display: flex; flex-direction: column; }.stat-card:first-child { border-left: 0; }.stat-card span { color: var(--muted); font-size: 13px; }.stat-card strong { margin-top: auto; font-size: 36px; letter-spacing: -2px; font-weight: 600; }.stat-card small { color: var(--muted); margin-top: 3px; font-size: 12px; }.total-card { background: #ecffd0; }.route-count { margin-top: auto; display: flex; align-items: center; gap: 13px; }.route-count b { font-size: 34px; letter-spacing: -2px; }.route-count i { display: block; width: 18px; border-top: 1px solid #7b8078; }
-.analytics-section { padding: 92px 0 0; }.analytics-heading { display: flex; justify-content: space-between; align-items: end; gap: 24px; }.analytics-heading h2 { margin: 10px 0 0; font-size: 34px; letter-spacing: -2px; font-weight: 600; }.analytics-caption { margin: 17px 0 29px; color: var(--muted); font-size: 13px; }.period-tabs { display: flex; padding: 3px; gap: 2px; border-radius: 7px; background: #e9e7df; }.period-tabs button { border: 0; background: transparent; color: var(--muted); border-radius: 5px; padding: 8px 11px; font-size: 12px; font-weight: 600; }.period-tabs button.active { color: var(--ink); background: var(--cream); box-shadow: 0 1px 3px #1e201c15; }.analytics-grid { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr 1fr; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); }.analytics-card { display: flex; flex-direction: column; min-height: 175px; padding: 26px 20px; border-left: 1px solid var(--line); }.analytics-card:first-child { border-left: 0; }.analytics-card span { color: var(--muted); font-size: 12px; }.analytics-card strong { margin-top: auto; font-size: 28px; letter-spacing: -1.7px; font-weight: 600; white-space: nowrap; }.analytics-card small { color: var(--muted); font-size: 11px; line-height: 1.35; margin-top: 5px; }.analytics-total { background: var(--green); color: white; }.analytics-total span, .analytics-total small { color: #d2decf; }.member-card { background: #f1efe8; }
+/* ========================================================
+   COMPREHENSIVE COLLEGE ANALYTICS & BUDGETING SUITE
+   ======================================================== */
+.analytics-section { padding: 88px 0 0; }
+.analytics-heading { display: flex; justify-content: space-between; align-items: flex-end; gap: 24px; flex-wrap: wrap; margin-bottom: 22px; }
+.analytics-heading h2 { margin: 8px 0 0; font-size: 34px; letter-spacing: -2px; font-weight: 600; }
+
+/* Horizon Selector & Week Navigation Bar */
+.horizon-bar { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+.period-tabs { display: flex; padding: 3px; gap: 2px; border-radius: 8px; background: #e9e7df; border: 1px solid var(--line); }
+.period-tabs button { border: 0; background: transparent; color: var(--muted); border-radius: 6px; padding: 7px 12px; font-size: 12px; font-weight: 600; transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1); white-space: nowrap; }
+.period-tabs button:hover { color: var(--ink); }
+.period-tabs button.active { color: var(--ink); background: var(--cream); box-shadow: 0 1px 4px rgba(30, 32, 28, 0.12); }
+
+.week-navigator { display: flex; align-items: center; gap: 10px; background: #f2f0e8; border: 1px solid var(--line); border-radius: 8px; padding: 5px 8px; }
+.week-nav-btn { border: 1px solid var(--line); background: var(--cream); color: var(--ink); border-radius: 5px; padding: 6px 12px; font-size: 11px; font-weight: 600; transition: all 0.15s ease; cursor: pointer; }
+.week-nav-btn:hover { background: #eae7df; border-color: #c9c6bc; }
+.week-nav-btn:active { transform: scale(0.96); }
+.week-nav-btn.today-btn { background: var(--green); color: #fff; border-color: var(--green); }
+.week-nav-btn.today-btn:hover { background: #355949; }
+.week-label-display { font-family: "DM Mono", monospace; font-size: 12px; font-weight: 600; color: var(--ink); padding: 0 6px; white-space: nowrap; }
+
+/* Filter Toolbar */
+.filter-toolbar { display: flex; align-items: center; gap: 14px; padding: 10px 14px; background: #f6f4ed; border: 1px solid var(--line); border-radius: 8px; margin-bottom: 22px; flex-wrap: wrap; }
+.filter-group-label { font-family: "DM Mono", monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+.filter-pill-group { display: flex; gap: 4px; align-items: center; }
+.filter-pill { border: 1px solid var(--line); background: var(--cream); color: var(--muted); padding: 4px 10px; font-size: 11px; font-weight: 600; border-radius: 100px; transition: all 0.15s ease; cursor: pointer; }
+.filter-pill:hover { color: var(--ink); border-color: #c9c6bc; }
+.filter-pill.active { background: var(--ink); color: #fff; border-color: var(--ink); }
+.filter-divider { width: 1px; height: 18px; background: var(--line); }
+
+/* Top Row: Primary KPIs */
+.analytics-kpi-grid { display: grid; grid-template-columns: 1.3fr 1fr 1fr 1fr; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); }
+.analytics-card { display: flex; flex-direction: column; min-height: 165px; padding: 22px 20px; border-left: 1px solid var(--line); position: relative; }
+.analytics-card:first-child { border-left: 0; }
+.analytics-card span.kpi-label { color: var(--muted); font-size: 12px; font-weight: 500; }
+.analytics-card strong.kpi-value { margin-top: auto; font-size: 30px; letter-spacing: -1.8px; font-weight: 600; white-space: nowrap; color: var(--ink); }
+.analytics-card small.kpi-sub { color: var(--muted); font-size: 11px; line-height: 1.4; margin-top: 4px; }
+.analytics-kpi-total { background: var(--green); color: white; }
+.analytics-kpi-total strong.kpi-value { color: #fff; }
+.analytics-kpi-total span.kpi-label, .analytics-kpi-total small.kpi-sub { color: #c9dbcc; }
+
+/* 4-Day Transportation Budget Module */
+.budget-banner { padding: 24px; background: var(--cream); border: 1px solid var(--line); border-radius: 10px; margin-top: 24px; margin-bottom: 24px; }
+.budget-header { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.budget-title-wrap { display: flex; flex-direction: column; gap: 4px; }
+.budget-eyebrow { font-family: "DM Mono", monospace; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.budget-title-wrap h3 { margin: 0; font-size: 22px; font-weight: 600; letter-spacing: -0.8px; color: var(--ink); }
+.budget-actions { display: flex; align-items: center; gap: 10px; }
+.budget-edit-btn { border: 1px solid var(--line); background: var(--paper); color: var(--ink); border-radius: 6px; padding: 6px 12px; font-size: 11px; font-weight: 600; cursor: pointer; transition: all 0.15s ease; }
+.budget-edit-btn:hover { background: #edeae1; }
+
+.status-badge { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 100px; font-family: "DM Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; }
+.status-badge.under { background: #dcefd4; color: #23513b; }
+.status-badge.over { background: #fde8e1; color: #7f2d27; }
+.status-badge.on { background: #e7e5de; color: #464841; }
+
+.budget-stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; padding: 16px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.budget-stat-item { display: flex; flex-direction: column; gap: 3px; }
+.budget-stat-item span { font-size: 12px; color: var(--muted); }
+.budget-stat-item strong { font-size: 22px; letter-spacing: -1.2px; font-weight: 600; color: var(--ink); }
+.budget-stat-item small { font-size: 11px; color: var(--muted); }
+.budget-stat-item.highlight strong { color: var(--green); }
+
+.budget-meter-wrap { margin-top: 18px; display: flex; flex-direction: column; gap: 6px; }
+.budget-meter { height: 10px; border-radius: 100px; background: #e8e5dc; overflow: hidden; position: relative; }
+.budget-meter-fill { height: 100%; background: var(--lime); border-radius: 100px; transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.budget-meter-fill.over { background: #e07a68; }
+.budget-meter-labels { display: flex; justify-content: space-between; font-family: "DM Mono", monospace; font-size: 11px; color: var(--muted); }
+
+/* Saturday -> Friday Day-by-Day Spending */
+.daily-section-card { padding: 26px 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 24px; }
+.daily-header { display: flex; justify-content: space-between; align-items: center; gap: 14px; margin-bottom: 20px; flex-wrap: wrap; }
+.daily-header h3 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.8px; color: var(--ink); }
+.pulse-bars { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; align-items: end; height: 155px; padding-bottom: 4px; }
+.pulse-col { display: flex; flex-direction: column; align-items: center; height: 100%; justify-content: flex-end; background: none; border: 0; padding: 4px 2px; cursor: pointer; border-radius: 6px; transition: transform 0.18s cubic-bezier(0.16, 1, 0.3, 1), background 0.18s ease; width: 100%; }
+.pulse-col:hover { transform: translateY(-2px); background: rgba(41, 71, 58, 0.04); }
+.pulse-col.selected { background: rgba(41, 71, 58, 0.08); box-shadow: inset 0 0 0 1px var(--green); }
+.pulse-bar-slot { width: 100%; max-width: 40px; height: 108px; background: #edeae2; border-radius: 6px; display: flex; flex-direction: column-reverse; overflow: hidden; position: relative; border: 1px solid rgba(0, 0, 0, 0.04); }
+.pulse-segment-campus { width: 100%; background: var(--lime); transition: height 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.pulse-segment-home { width: 100%; background: var(--pink); transition: height 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
+.pulse-zero-marker { position: absolute; bottom: 0; left: 0; right: 0; height: 4px; background: #dad6cb; border-radius: 2px; }
+.pulse-benchmark-line { position: absolute; left: 0; right: 0; border-top: 1px dashed #7a8074; z-index: 2; pointer-events: none; }
+.pulse-col-meta { margin-top: 8px; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.pulse-day-name { font-family: "DM Mono", monospace; font-size: 11px; font-weight: 600; color: var(--muted); text-transform: uppercase; }
+.pulse-day-num { font-size: 12px; font-weight: 600; color: var(--ink); }
+.pulse-col.today .pulse-day-name { color: var(--green); font-weight: 700; }
+.pulse-col.today .pulse-day-num { background: var(--green); color: #fff; border-radius: 50%; width: 18px; height: 18px; display: grid; place-items: center; font-size: 10px; }
+.pulse-college-indicator { font-family: "DM Mono", monospace; font-size: 9px; padding: 1px 4px; border-radius: 3px; margin-top: 3px; font-weight: 500; }
+.pulse-college-indicator.active { background: #dcefd4; color: #23513b; }
+.pulse-college-indicator.rest { color: var(--muted); }
+
+/* Day Inspector Banner */
+.day-inspector { margin-top: 16px; padding: 12px 16px; background: #f1efe7; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 13px; animation: modalPopIn 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+.day-inspector b { color: var(--ink); }
+.day-inspector span { color: var(--muted); }
+.day-inspector button { border: 0; background: none; color: var(--muted); font-size: 18px; padding: 0 4px; cursor: pointer; line-height: 1; }
+.day-inspector button:hover { color: var(--ink); }
+
+/* 2 x 2 Ride Type Breakdown Matrix */
+.matrix-card { padding: 26px 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; margin-bottom: 24px; }
+.matrix-card h3 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.8px; color: var(--ink); }
+.matrix-container { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 18px; }
+.matrix-quadrant { background: #f4f2ea; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; display: flex; flex-direction: column; }
+.matrix-quadrant-header { padding: 10px 14px; background: #eae7df; border-bottom: 1px solid var(--line); font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: space-between; color: var(--ink); }
+.matrix-sub-grid { display: grid; grid-template-columns: 1fr 1fr; }
+.matrix-cell { padding: 16px 14px; display: flex; flex-direction: column; gap: 4px; }
+.matrix-cell:first-child { border-right: 1px solid var(--line); }
+.matrix-cell-type { font-family: "DM Mono", monospace; font-size: 10px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.matrix-cell-spend { font-size: 22px; font-weight: 600; letter-spacing: -1.2px; color: var(--ink); }
+.matrix-cell-meta { font-size: 11px; color: var(--muted); line-height: 1.35; }
+
+/* Solo vs Shared & Savings Card */
+.comparison-section-grid { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; margin-bottom: 24px; }
+.comparison-card, .bus-benchmark-card { padding: 26px 24px; background: var(--paper); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; }
+.comparison-card h3, .bus-benchmark-card h3 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.8px; color: var(--ink); }
+.solo-shared-duo { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin: 18px 0; }
+.duo-box { padding: 16px; background: #f4f2ea; border: 1px solid var(--line); border-radius: 8px; display: flex; flex-direction: column; gap: 4px; }
+.duo-box-title { font-size: 13px; font-weight: 600; display: flex; align-items: center; gap: 6px; }
+.duo-box-spend { font-size: 24px; font-weight: 600; letter-spacing: -1.4px; color: var(--ink); margin-top: 4px; }
+.duo-box-meta { font-size: 11px; color: var(--muted); }
+
+.sharing-savings-callout { margin-top: auto; padding: 14px 16px; background: #e3f4c3; border: 1px solid #b8df79; border-radius: 8px; display: flex; flex-direction: column; gap: 4px; }
+.sharing-savings-title { display: flex; align-items: center; justify-content: space-between; }
+.sharing-savings-title b { font-size: 13px; color: #20411b; }
+.sharing-savings-title strong { font-size: 20px; letter-spacing: -0.8px; color: #1d3e18; }
+.sharing-savings-callout small { color: #43693c; font-size: 11px; line-height: 1.35; }
+
+/* EGP 42,000 Bus Benchmark Card */
+.benchmark-main-stat { margin: 18px 0 14px; display: flex; flex-direction: column; gap: 4px; }
+.benchmark-saved-num { font-size: 34px; letter-spacing: -2px; font-weight: 600; color: var(--green); }
+.benchmark-subtitle { font-size: 12px; color: var(--muted); }
+.benchmark-gauge-wrap { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+.benchmark-gauge { height: 12px; border-radius: 100px; background: #e3efe0; overflow: hidden; display: flex; }
+.benchmark-seg-solo { background: #84a82d; transition: width 0.3s ease; }
+.benchmark-seg-shared { background: var(--green); transition: width 0.3s ease; }
+.benchmark-gauge-labels { display: flex; justify-content: space-between; font-family: "DM Mono", monospace; font-size: 10px; color: var(--muted); }
+.benchmark-breakdown-list { display: flex; flex-direction: column; gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 12px; }
+.benchmark-row { display: flex; justify-content: space-between; align-items: center; color: var(--ink); }
+.benchmark-row span { color: var(--muted); }
+.benchmark-row b { font-family: "DM Mono", monospace; }
+
+/* Factual Data Insights Card */
+.insights-card { padding: 26px 24px; background: #f8f6f0; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 36px; }
+.insights-header { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+.insights-header h3 { margin: 0; font-size: 20px; font-weight: 600; letter-spacing: -0.8px; color: var(--ink); }
+.insights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.insight-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; background: var(--cream); border: 1px solid var(--line); border-radius: 8px; font-size: 13px; line-height: 1.45; color: var(--ink); }
+.insight-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--lime); border: 1px solid #9dbf39; margin-top: 5px; flex-shrink: 0; }
+
+
 .ledger-section { padding: 98px 0 112px; }.section-heading { display: flex; align-items: end; justify-content: space-between; margin-bottom: 30px; }.section-heading h2 { margin: 10px 0 0; font-size: 34px; letter-spacing: -2px; font-weight: 600; }.text-button { border: 0; background: none; padding: 8px 0; color: var(--green); font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--green); }.ledger { border-top: 1px solid var(--ink); }.trip-row { min-height: 95px; border-bottom: 1px solid var(--line); display: grid; grid-template-columns: 1.15fr 1.2fr .7fr .85fr; align-items: center; gap: 18px; transition: background .2s; }.trip-row:hover { background: #f0eee7; }.trip-direction { display: grid; grid-template-columns: 26px 1fr; align-items: center; column-gap: 10px; }.trip-direction > span { grid-row: span 2; width: 26px; height: 26px; border-radius: 50%; position: relative; }.trip-direction.campus > span { background: #d9ff70; }.trip-direction.home > span { background: var(--pink); }.trip-direction > span::before { content: ""; position: absolute; top: 12px; left: 8px; width: 10px; border-top: 1px solid #293229; }.trip-direction > span::after { content: ""; position: absolute; top: 9px; right: 7px; width: 5px; height: 5px; border: solid #293229; border-width: 1px 1px 0 0; transform: rotate(45deg); }.trip-direction b, .trip-detail b, .trip-price b { font-size: 14px; font-weight: 600; }.trip-direction small, .trip-detail span, .trip-price span { color: var(--muted); font-size: 12px; }.trip-detail, .trip-price { display: flex; flex-direction: column; gap: 4px; }.trip-status { display: flex; justify-content: flex-end; align-items: center; gap: 9px; }.settled, .waiting { border-radius: 50px; padding: 7px 10px; font-size: 11px; white-space: nowrap; }.settled { color: #23513b; background: #dcefd4; }.waiting { color: #77786f; background: #e7e5de; }.settle-button { border: 1px solid var(--ink); border-radius: 4px; background: transparent; color: var(--ink); padding: 8px 10px; font-size: 12px; font-weight: 600; transition: all .2s; }.settle-button:hover { color: #fff; background: var(--ink); }.edit-button { border: 0; background: none; color: var(--muted); font-size: 11px; padding: 7px 0; text-decoration: underline; text-underline-offset: 3px; }.edit-button:hover { color: var(--ink); }.ledger-empty { padding: 35px 0; color: var(--muted); font-size: 14px; }
 footer { border-top: 1px solid var(--line); padding: 28px 0 40px; display: flex; justify-content: space-between; color: var(--muted); font-size: 12px; }
 .empty-space { min-height: calc(100vh - 170px); padding: 13vh 0; }.empty-space h1 { margin-bottom: 22px; }.empty-space p { max-width: 450px; color: var(--muted); line-height: 1.65; }.empty-actions { display: flex; gap: 10px; margin-top: 29px; }.secondary { border: 1px solid var(--ink); background: transparent; color: var(--ink); border-radius: 6px; padding: 13px 18px; font-weight: 600; }
@@ -128,11 +278,21 @@ footer { border-top: 1px solid var(--line); padding: 28px 0 40px; display: flex;
   .analytics-section { padding-top: 66px; }
   .analytics-heading { align-items: start; flex-direction: column; }
   .analytics-heading h2 { font-size: 27px; }
-  .analytics-grid { grid-template-columns: 1fr 1fr; }
-  .analytics-card { min-height: 142px; padding: 18px 15px; }
-  .analytics-card:nth-child(3), .analytics-card:nth-child(5) { border-left: 0; border-top: 1px solid var(--line); }
-  .analytics-card:nth-child(4) { border-top: 1px solid var(--line); }
-  .analytics-card strong { font-size: 22px; }
+  .period-tabs { width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .period-tabs button { padding: 7px 10px; font-size: 11px; }
+  .analytics-kpi-grid { grid-template-columns: 1fr 1fr; margin-left: calc(-1 * max(16px, env(safe-area-inset-left))); margin-right: calc(-1 * max(16px, env(safe-area-inset-right))); border-left: 0; border-right: 0; }
+  .analytics-card { min-height: 135px; padding: 18px 15px; border-left: 1px solid var(--line); }
+  .analytics-card:first-child, .analytics-card:nth-child(3) { border-left: 0; }
+  .analytics-card:nth-child(n+3) { border-top: 1px solid var(--line); }
+  .analytics-card strong.kpi-value { font-size: 22px; }
+  .analytics-mid-grid, .analytics-bottom-grid { grid-template-columns: 1fr; margin-left: calc(-1 * max(16px, env(safe-area-inset-left))); margin-right: calc(-1 * max(16px, env(safe-area-inset-right))); border-left: 0; border-right: 0; }
+  .route-card, .trip-mix-card { border-left: 0; border-top: 1px solid var(--line); }
+  .pulse-card, .route-card, .equity-card, .trip-mix-card { padding: 22px 16px; }
+  .pulse-bars { gap: 5px; }
+  .pulse-bar-slot { max-width: 32px; }
+  .pulse-day-name { font-size: 10px; }
+  .pulse-day-num { font-size: 11px; }
+
   .ledger-section { padding: 65px 0 72px; }
   .section-heading h2 { font-size: 27px; }
   .section-analytics-grid { grid-template-columns: 1fr 1fr; margin-left: calc(-1 * max(16px, env(safe-area-inset-left))); margin-right: calc(-1 * max(16px, env(safe-area-inset-right))); border-left: 0; border-right: 0; }
