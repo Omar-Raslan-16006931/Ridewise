@@ -961,10 +961,33 @@ export default function Home() {
                   <div>
                     <h4 className="daily-pulse-title">Daily Spending Pulse</h4>
                     <span style={{ fontSize: "11px", color: "var(--muted)" }}>Sat → Fri · Personal commute spend</span>
+              {/* Monthly Commute Projection: Current vs Expected vs Budget Limit */}
+              <section className="monthly-runrate-card">
+                <div className="section-header-row" style={{ margin: 0 }}>
+                  <h4 className="trend-chart-title">Monthly Commute Projection</h4>
+                  <span className="section-header-meta">Avg weekly × 4</span>
+                </div>
+
+                {/* 3 Comparison Cards: Current Monthly Spend vs Expected vs Budget Limit */}
+                <div className="monthly-compare-trio">
+                  <div className="monthly-compare-card highlight">
+                    <span className="monthly-compare-label">Current Month</span>
+                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.currentMonthSpend)}</strong>
+                    <span className="monthly-compare-sub">Personal spend</span>
                   </div>
                   <span style={{ fontSize: "11px", fontFamily: "DM Mono, monospace", color: "var(--green)", fontWeight: 700 }}>
                     {money.format(analytics.expectedDailyBudget)}/day target
                   </span>
+                  <div className="monthly-compare-card">
+                    <span className="monthly-compare-label">Expected</span>
+                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.expectedMonthlySpend)}</strong>
+                    <span className="monthly-compare-sub">College days pacing</span>
+                  </div>
+                  <div className="monthly-compare-card">
+                    <span className="monthly-compare-label">Budget Limit</span>
+                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.monthlyBudgetLimit)}</strong>
+                    <span className="monthly-compare-sub">Weekly × 4</span>
+                  </div>
                 </div>
 
                 <div className="daily-pulse-chart-wrap">
@@ -978,6 +1001,26 @@ export default function Home() {
                       </div>
                     );
                   })()}
+                {/* Progress bar vs Monthly Budget Limit */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <div className="bus-member-progress-track">
+                    <div
+                      className="bus-member-progress-fill"
+                      style={{
+                        width: `${Math.min(100, analytics.monthlyMetrics.pctOfLimit)}%`,
+                        background: analytics.monthlyMetrics.pctOfLimit > 100 ? "var(--red)" : "var(--green)",
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)", fontFamily: "DM Mono, monospace" }}>
+                    <span>{analytics.monthlyMetrics.pctOfLimit.toFixed(0)}% of limit</span>
+                    <span style={{ color: analytics.monthlyMetrics.diffFromLimit < 0 ? "var(--red)" : "var(--green)", fontWeight: 600 }}>
+                      {analytics.monthlyMetrics.diffFromLimit >= 0
+                        ? `${money.format(analytics.monthlyMetrics.diffFromLimit)} remaining`
+                        : `${money.format(Math.abs(analytics.monthlyMetrics.diffFromLimit))} over limit`}
+                    </span>
+                  </div>
+                </div>
 
                   <div className="daily-pulse-cols-grid">
                     {analytics.spendingDays.map((day) => {
@@ -1009,7 +1052,16 @@ export default function Home() {
                         </button>
                       );
                     })}
+                {/* Run Rate & Weekly Avg */}
+                <div className="monthly-runrate-hero">
+                  <div className="monthly-runrate-hero-left">
+                    <span className="monthly-runrate-hero-label">Weekly Avg → Monthly Projection (× 4)</span>
+                    <strong className="monthly-runrate-hero-val">{money.format(analytics.monthlyMetrics.averageMonthlySpend)}</strong>
+                    <span className="monthly-runrate-hero-sub">
+                      Based on {money.format(analytics.monthlyMetrics.averageWeeklySpend)}/wk personal average
+                    </span>
                   </div>
+                  <span className="monthly-pacing-tag">4× Weekly</span>
                 </div>
 
                 {/* Inline Day Summary */}
@@ -1019,6 +1071,20 @@ export default function Home() {
                   const dayTrips = trips.filter((t) => toLocalDateKey(t.ride_at) === selectedDayIso);
                   const totalSpend = day.campusSpend + day.homeSpend;
                   const diff = totalSpend - analytics.expectedDailyBudget;
+                {/* Fair Share Payment Balance */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "2px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      Payer Balance & Out of Pocket
+                    </span>
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: stats.net > 0 ? "var(--green)" : stats.net < 0 ? "var(--amber)" : "var(--muted)" }}>
+                      {stats.net > 0
+                        ? `You are owed ${money.format(stats.net)}`
+                        : stats.net < 0
+                        ? `You owe ${money.format(Math.abs(stats.net))}`
+                        : "All settled up"}
+                    </span>
+                  </div>
 
                   return (
                     <div className="daily-pulse-inline-summary">
@@ -1034,12 +1100,22 @@ export default function Home() {
                         >
                           ×
                         </button>
+                  {stats.total > 0 && (
+                    <>
+                      <div className="payer-bar-track">
+                        <div
+                          className="payer-bar-fill"
+                          style={{ width: `${(stats.paidByYou / stats.total) * 100}%` }}
+                        />
                       </div>
                       <div style={{ display: "flex", justifyContent: "space-between", color: "var(--ink)", fontWeight: 600 }}>
                         <span>Spend: {money.format(totalSpend)} ({day.ridesCount} {day.ridesCount === 1 ? "ride" : "rides"})</span>
                         <span style={{ color: diff > 5 ? "var(--red)" : diff < -5 ? "var(--green)" : "var(--muted)" }}>
                           {totalSpend === 0 ? "Rest day" : diff > 0 ? `+${money.format(diff)} over target` : `${money.format(Math.abs(diff))} under target`}
                         </span>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)" }}>
+                        <span>You paid: <b>{money.format(stats.paidByYou)}</b></span>
+                        <span>{otherMember?.display_name || "Co-pilot"} paid: <b>{money.format(stats.paidByOther)}</b></span>
                       </div>
                       {dayTrips.length > 0 && (
                         <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px", borderTop: "1px solid #ede8dc", paddingTop: "6px" }}>
@@ -1054,6 +1130,9 @@ export default function Home() {
                     </div>
                   );
                 })()}
+                    </>
+                  )}
+                </div>
               </section>
 
               {/* Bus Benchmark (EGP 42,000) - Strictly Personal Commute */}
@@ -1424,6 +1503,7 @@ export default function Home() {
               </section>
 
               {/* 4. SOLO RIDES SCOPE SELECTOR & DEEP DIVE */}
+              {/* 3. SOLO RIDES SCOPE SELECTOR & DEEP DIVE */}
               <section style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "var(--shadow-sm)" }}>
                 <div className="solo-scope-wrap">
                   <span className="solo-scope-label">Solo Rides Filter</span>
