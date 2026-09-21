@@ -79,6 +79,20 @@ export function weeklyTotal(trips: Trip[]): number {
 }
 
 /**
+ * Returns YYYY-MM-DD representing the local calendar day for a given Date or ISO string.
+ * Avoids UTC timezone conversion shifts (e.g. UTC+2/UTC+3 turning local midnight into the previous day).
+ */
+export function toLocalDateKey(dateInput?: Date | string | null): string {
+  if (!dateInput) return "";
+  const d = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+  if (isNaN(d.getTime())) return "";
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * Computes the daily college-day budget. Always divides by college days (4), never by 7.
  */
 export function dailyBudget(weeklyBudget: number, collegeDays = EXPECTED_COLLEGE_DAYS): number {
@@ -87,14 +101,15 @@ export function dailyBudget(weeklyBudget: number, collegeDays = EXPECTED_COLLEGE
 }
 
 /**
- * Counts unique active college days (dates with at least 1 ride) in the trips.
+ * Counts unique active college days (dates with at least 1 ride) in the trips using local calendar days.
  */
 export function collegeDaysUsed(trips: Trip[]): number {
   if (!trips || trips.length === 0) return 0;
   const uniqueDates = new Set(
     trips
       .filter((trip) => trip && trip.ride_at)
-      .map((trip) => new Date(trip.ride_at).toISOString().slice(0, 10))
+      .map((trip) => toLocalDateKey(trip.ride_at))
+      .filter((key) => key.length > 0)
   );
   return uniqueDates.size;
 }
@@ -350,8 +365,8 @@ export function computeSpendingByDay(
 
   const days: DaySpendingItem[] = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + i);
-    const isoDate = d.toISOString().slice(0, 10);
-    const dayTrips = allTrips.filter((t) => new Date(t.ride_at).toISOString().slice(0, 10) === isoDate);
+    const isoDate = toLocalDateKey(d);
+    const dayTrips = allTrips.filter((t) => toLocalDateKey(t.ride_at) === isoDate);
 
     const actualSpend = memberId ? personalTotal(dayTrips, memberId) : weeklyTotal(dayTrips);
     if (actualSpend > maxSpend) maxSpend = actualSpend;

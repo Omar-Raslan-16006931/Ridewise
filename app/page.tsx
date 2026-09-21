@@ -26,6 +26,7 @@ import {
   compute2x2Matrix,
   computeSpendingByDay,
   generateFactualInsights,
+  toLocalDateKey,
 } from "../lib/analytics";
 
 const demoGroup: RideGroup = { id: "demo-group", name: "Omar + Khaled", invite_code: "RIDE2026" };
@@ -214,7 +215,7 @@ export default function Home() {
 
   const analytics = useMemo(() => {
     const now = new Date();
-    const todayIso = now.toISOString().slice(0, 10);
+    const todayIso = toLocalDateKey(now);
     const { start: weekStart, end: weekEnd } = getAcademicWeekBounds(weekOffset, now);
 
     let horizonStart: Date | null = null;

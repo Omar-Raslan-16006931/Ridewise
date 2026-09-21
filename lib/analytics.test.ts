@@ -21,6 +21,7 @@ import {
   compute2x2Matrix,
   computeSpendingByDay,
   getAcademicWeekBounds,
+  toLocalDateKey,
   BUS_BENCHMARK,
 } from "./analytics";
 import type { Member, Trip } from "./types";
@@ -126,4 +127,54 @@ test("personal budget calculates half of shared and own solo only", () => {
   assert.equal(personalCollegeDaysUsed(trips, "omar"), 3);
   // Khaled only rode on 2 days (Sept 10 shared, Sept 12 shared)
   assert.equal(personalCollegeDaysUsed(trips, "khaled"), 2);
+});
+
+test("toLocalDateKey formats Date and ISO strings using local year, month, date", () => {
+  const d = new Date(2026, 8, 21, 10, 30); // Sept 21, 2026 at 10:30 local
+  assert.equal(toLocalDateKey(d), "2026-09-21");
+  assert.equal(toLocalDateKey(""), "");
+  assert.equal(toLocalDateKey(null), "");
+});
+
+test("computeSpendingByDay assigns Monday Sept 21 ride to Monday, not Tuesday", () => {
+  // Monday Sept 21, 2026
+  const refDate = new Date(2026, 8, 21, 10, 0, 0); // local Monday Sept 21
+  const { start: weekStart } = getAcademicWeekBounds(0, refDate);
+
+  // A ride logged on Monday Sept 21
+  const mondayTrip: Trip = {
+    id: "mon-ride",
+    ride_at: new Date(2026, 8, 21, 10, 35, 0).toISOString(),
+    direction: "campus",
+    amount: 120,
+    paid_by: "omar",
+    notes: "Monday class",
+    settled_at: null,
+    settled_by: null,
+    trip_mode: "shared",
+    solo_by: null,
+  };
+
+  const todayIso = toLocalDateKey(refDate); // "2026-09-21"
+  const { days } = computeSpendingByDay([mondayTrip], weekStart, 175, todayIso, "omar");
+
+  // Week days: Sat(0), Sun(1), Mon(2), Tue(3), Wed(4), Thu(5), Fri(6)
+  const monday = days.find((d) => d.dayName === "Mon");
+  const tuesday = days.find((d) => d.dayName === "Tue");
+
+  assert.ok(monday, "Monday entry should exist");
+  assert.ok(tuesday, "Tuesday entry should exist");
+
+  assert.equal(monday.dayFullName, "Monday");
+  assert.equal(monday.dayNum, 21);
+  assert.equal(monday.isToday, true);
+  assert.equal(monday.ridesCount, 1);
+  assert.equal(monday.actualSpend, 60); // half of 120 shared
+
+  // Tuesday must NOT have Monday's trip!
+  assert.equal(tuesday.dayFullName, "Tuesday");
+  assert.equal(tuesday.dayNum, 22);
+  assert.equal(tuesday.isToday, false);
+  assert.equal(tuesday.ridesCount, 0);
+  assert.equal(tuesday.actualSpend, 0);
 });
