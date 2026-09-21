@@ -27,6 +27,10 @@ import {
   computeSpendingByDay,
   generateFactualInsights,
   toLocalDateKey,
+  filterSoloTrips,
+  computeSpendingTrend,
+  type SoloScope,
+  type TrendDataPoint,
 } from "../lib/analytics";
 
 const demoGroup: RideGroup = { id: "demo-group", name: "Omar + Khaled", invite_code: "RIDE2026" };
@@ -42,7 +46,7 @@ const demoTrips: Trip[] = [
   { id: "5", ride_at: "2026-09-08T08:11:00.000Z", direction: "campus", amount: 124, trip_mode: "shared", solo_by: null, paid_by: "omar", notes: null, settled_at: "2026-09-08T13:12:00.000Z", settled_by: "khaled" },
 ];
 
-type Tab = "rides" | "analytics" | "split" | "space";
+type Tab = "rides" | "budget" | "trends" | "space";
 type Modal = "add" | "edit" | "sign-in" | "create-space" | "join-space" | "share" | "budget" | null;
 type AuthUser = { id: string; email?: string } | null;
 type TimeHorizon = "week" | "4weeks" | "3months" | "lifetime";
@@ -74,11 +78,13 @@ export default function Home() {
   // Rides Feed Filters
   const [ridesFilter, setRidesFilter] = useState<"all" | "unsettled" | "shared" | "solo">("all");
 
-  // Analytics State
+  // Analytics & Scope State
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>("week");
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [weeklyBudget, setWeeklyBudget] = useState<number>(700);
   const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
+  const [soloScope, setSoloScope] = useState<SoloScope>("mine");
+  const [activeTrendDot, setActiveTrendDot] = useState<TrendDataPoint | null>(null);
 
   // Load saved budget from localStorage on initial render
   useEffect(() => {
@@ -288,22 +294,37 @@ export default function Home() {
     // 2x2 Matrix Breakdown
     const matrix = compute2x2Matrix(horizonTrips);
 
-    // Solo vs Shared Comparison & Savings
-    const soloSpendVal = soloTotal(horizonTrips);
-    const sharedSpendVal = sharedTotal(horizonTrips);
-    const soloRidesCount = horizonTrips.filter((t) => t.trip_mode === "solo").length;
-    const sharedRidesCount = horizonTrips.filter((t) => t.trip_mode === "shared").length;
+    // Solo vs Shared Comparison & Scoped Solo Savings
+    const scopedSoloTrips = filterSoloTrips(horizonTrips, soloScope, currentUserId);
+    const soloSpendVal = scopedSoloTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const soloRidesCount = scopedSoloTrips.length;
     const soloAvgCost = soloRidesCount > 0 ? soloSpendVal / soloRidesCount : 0;
+    const sharedSpendVal = sharedTotal(horizonTrips);
+    const sharedRidesCount = horizonTrips.filter((t) => t.trip_mode === "shared").length;
     const sharedAvgCost = sharedRidesCount > 0 ? sharedSpendVal / sharedRidesCount : 0;
     const sharingSavingsVal = sharedRideSavings(horizonTrips);
     const allTimeSharingSavings = sharedRideSavings(trips);
+
+    // Cumulative Spending Trend (for the interactive SVG chart)
+    const spendingTrend = computeSpendingTrend(horizonTrips, currentUserId);
+
+    // Commuter Route Breakdown (Morning Campus vs Evening Home)
+    const campusTrips = horizonTrips.filter((t) => t.direction === "campus");
+    const homeTrips = horizonTrips.filter((t) => t.direction === "home");
+    const campusSpend = campusTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const homeSpend = homeTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const campusSharedCount = campusTrips.filter((t) => t.trip_mode === "shared").length;
+    const campusSoloCount = filterSoloTrips(campusTrips, soloScope, currentUserId).length;
+    const homeSharedCount = homeTrips.filter((t) => t.trip_mode === "shared").length;
+    const homeSoloCount = filterSoloTrips(homeTrips, soloScope, currentUserId).length;
 
     // EGP 42,000 Bus Benchmark
     const allTimeTotalSpend = weeklyTotal(trips);
     const busSavingsVal = busBenchmarkSavings(allTimeTotalSpend, BUS_BENCHMARK);
     const busUsedPctVal = busBenchmarkPercentageUsed(allTimeTotalSpend, BUS_BENCHMARK);
     const busSavedPctVal = busBenchmarkPercentageSaved(allTimeTotalSpend, BUS_BENCHMARK);
-    const allTimeSoloSpend = soloTotal(trips);
+    const allTimeScopedSoloTrips = filterSoloTrips(trips, soloScope, currentUserId);
+    const allTimeSoloSpend = allTimeScopedSoloTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const allTimeSharedSpend = sharedTotal(trips);
     const soloBusUsedPct = busBenchmarkPercentageUsed(allTimeSoloSpend, BUS_BENCHMARK);
     const sharedBusUsedPct = busBenchmarkPercentageUsed(allTimeSharedSpend, BUS_BENCHMARK);
@@ -359,8 +380,17 @@ export default function Home() {
       soloBusUsedPct,
       sharedBusUsedPct,
       factualInsights,
+      spendingTrend,
+      campusTrips,
+      homeTrips,
+      campusSpend,
+      homeSpend,
+      campusSharedCount,
+      campusSoloCount,
+      homeSharedCount,
+      homeSoloCount,
     };
-  }, [trips, timeHorizon, weekOffset, weeklyBudget, currentUserId]);
+  }, [trips, timeHorizon, weekOffset, weeklyBudget, currentUserId, soloScope]);
 
   async function saveTrip(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -384,8 +414,6 @@ export default function Home() {
       notes: notes || null,
     };
     const tripBeingEdited = editingTrip;
-    setModal(null);
-    setEditingTrip(null);
 
     if (tripBeingEdited) {
       setTrips((existing) => existing.map((trip) => trip.id === tripBeingEdited.id ? { ...trip, ...tripValues } : trip));
@@ -553,11 +581,36 @@ export default function Home() {
                   <button className="hero-action-btn hero-action-primary" onClick={() => requestAction("add")}>
                     + Log ride
                   </button>
-                  <button className="hero-action-btn hero-action-secondary" onClick={() => setActiveTab("split")}>
-                    View split balance
+                  <button
+                    type="button"
+                    className="hero-action-btn hero-action-secondary"
+                    onClick={() => setRidesFilter(ridesFilter === "unsettled" ? "all" : "unsettled")}
+                  >
+                    {ridesFilter === "unsettled" ? "Show all rides" : `Unsettled (${unsettledTrips.length})`}
                   </button>
                 </div>
               </section>
+
+              {/* Top Quick Settlement Strip if pending */}
+              {stats.net !== 0 && (
+                <div className="rides-settlement-strip">
+                  <div className="rides-settlement-info">
+                    <span className="rides-settlement-icon">⚖️</span>
+                    <span>
+                      {stats.net > 0
+                        ? `${otherMember?.display_name ?? "Khaled"} owes you ${money.format(stats.net)}`
+                        : `You owe ${otherMember?.display_name ?? "Khaled"} ${money.format(Math.abs(stats.net))}`}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className="rides-settlement-btn"
+                    onClick={() => setRidesFilter("unsettled")}
+                  >
+                    Review {unsettledTrips.length} {unsettledTrips.length === 1 ? "ride" : "rides"}
+                  </button>
+                </div>
+              )}
 
               {/* Feed Filter Chips */}
               <div className="filter-bar">
@@ -688,9 +741,9 @@ export default function Home() {
             </main>
           )}
 
-          {/* TAB 2: ANALYTICS (Progressive Disclosure Mobile Suite) */}
-          {activeTab === "analytics" && (
-            <main className="tab-content" key="tab-analytics">
+          {/* TAB 2: BUDGET (Weekly College Routine & Pacing) */}
+          {activeTab === "budget" && (
+            <main className="tab-content" key="tab-budget">
               {/* Academic Week Switcher Bar */}
               <div className="week-switcher-bar">
                 <button
@@ -702,7 +755,7 @@ export default function Home() {
                   ←
                 </button>
                 <div className="week-switcher-center">
-                  <span className="week-switcher-title">Academic Week (Sat → Fri)</span>
+                  <span className="week-switcher-title">College Week (Sat → Fri)</span>
                   <span className="week-switcher-dates">{analytics.weekLabel}</span>
                   {weekOffset !== 0 && (
                     <button type="button" className="today-jump-btn" onClick={() => setWeekOffset(0)}>
@@ -720,40 +773,7 @@ export default function Home() {
                 </button>
               </div>
 
-              {/* Time Horizon Pills */}
-              <div className="filter-bar">
-                {(["week", "4weeks", "3months", "lifetime"] as TimeHorizon[]).map((hz) => (
-                  <button
-                    key={hz}
-                    type="button"
-                    className={`filter-chip ${timeHorizon === hz ? "active" : ""}`}
-                    onClick={() => { setTimeHorizon(hz); setSelectedDayIso(null); }}
-                  >
-                    {hz === "week" ? "Weekly" : hz === "4weeks" ? "4 Weeks" : hz === "3months" ? "3 Months" : "All time"}
-                  </button>
-                ))}
-              </div>
-
-              {/* Trio KPI Cards: Total Spent (Shared + Solo), Shared Only, Solo Only */}
-              <div className="analytics-summary-trio">
-                <div className="trio-card primary-trio">
-                  <span className="trio-label">Total Spent</span>
-                  <strong className="trio-value">{money.format(analytics.totalSpend)}</strong>
-                  <small className="trio-sub">Shared + Solo ({analytics.totalRides} {analytics.totalRides === 1 ? "ride" : "rides"})</small>
-                </div>
-                <div className="trio-card">
-                  <span className="trio-label">Shared Only</span>
-                  <strong className="trio-value">{money.format(analytics.sharedSpendVal)}</strong>
-                  <small className="trio-sub">{analytics.sharedRidesCount} {analytics.sharedRidesCount === 1 ? "ride" : "rides"}</small>
-                </div>
-                <div className="trio-card">
-                  <span className="trio-label">Solo Only</span>
-                  <strong className="trio-value">{money.format(analytics.soloSpendVal)}</strong>
-                  <small className="trio-sub">{analytics.soloRidesCount} {analytics.soloRidesCount === 1 ? "ride" : "rides"}</small>
-                </div>
-              </div>
-
-              {/* Hero 4-Day Budget Card: Per Person (half of shared + own solo only) */}
+              {/* Hero 4-Day Budget Card: Per Person */}
               <section className="budget-hero-card">
                 <div className="budget-hero-top">
                   <div className="budget-hero-title-wrap">
@@ -772,7 +792,7 @@ export default function Home() {
                   </span>
                 </div>
                 <p style={{ margin: "-8px 0 0", fontSize: "11px", color: "var(--muted)", lineHeight: 1.35 }}>
-                  Per-person allowance · 50% of shared rides + your own solo rides only.
+                  Per-person allowance · 50% of shared rides + your own solo rides.
                 </p>
 
                 <div className="budget-hero-stats">
@@ -812,9 +832,25 @@ export default function Home() {
                     </button>
                   </div>
                 </div>
+
+                {/* 1-Tap Quick Budget Presets */}
+                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "12px" }}>
+                  <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>Presets:</span>
+                  {[400, 500, 600, 700, 800, 1000].map((amt) => (
+                    <button
+                      key={amt}
+                      type="button"
+                      className={`filter-chip ${weeklyBudget === amt ? "active" : ""}`}
+                      style={{ padding: "4px 8px", fontSize: "11px" }}
+                      onClick={() => handleSaveBudget(amt)}
+                    >
+                      {amt}
+                    </button>
+                  ))}
+                </div>
               </section>
 
-              {/* Saturday -> Friday Day-by-Day Pulse */}
+              {/* Saturday -> Friday Day-by-Day Pulse Bar Chart */}
               <section className="daily-pulse-card">
                 <div className="daily-pulse-header">
                   <h4 className="daily-pulse-title">Daily spending pulse</h4>
@@ -861,187 +897,333 @@ export default function Home() {
                 )}
               </section>
 
-              {/* PROGRESSIVE DISCLOSURE ACCORDIONS */}
-              <div className="accordion-stack">
-                {/* 1. To Campus vs Home (2x2 Matrix) */}
-                <div className="accordion-item">
-                  <button
-                    type="button"
-                    className="accordion-trigger"
-                    onClick={() => toggleAccordion("matrix")}
-                    aria-expanded={accordionsOpen.matrix}
-                  >
-                    <div className="accordion-trigger-left">
-                      <span className="accordion-trigger-title">
-                        <span>🎓 / 🏡</span> Direction & Ride Matrix
-                      </span>
-                      <span className="accordion-trigger-preview">
-                        Campus: {analytics.matrix.toCampus.totalCount} rides · Home: {analytics.matrix.backHome.totalCount} rides
-                      </span>
-                    </div>
-                    <span className={`accordion-chevron ${accordionsOpen.matrix ? "open" : ""}`}>▼</span>
-                  </button>
-                  {accordionsOpen.matrix && (
-                    <div className="accordion-content">
-                      <div className="matrix-mini-grid">
-                        <div className="matrix-mini-quadrant">
-                          <span className="matrix-quadrant-title">To Campus · Shared</span>
-                          <span className="matrix-quadrant-spend">{money.format(analytics.matrix.toCampus.shared.spend)}</span>
-                          <span className="matrix-quadrant-meta">{analytics.matrix.toCampus.shared.count} rides</span>
-                        </div>
-                        <div className="matrix-mini-quadrant">
-                          <span className="matrix-quadrant-title">To Campus · Solo</span>
-                          <span className="matrix-quadrant-spend">{money.format(analytics.matrix.toCampus.solo.spend)}</span>
-                          <span className="matrix-quadrant-meta">{analytics.matrix.toCampus.solo.count} rides</span>
-                        </div>
-                        <div className="matrix-mini-quadrant">
-                          <span className="matrix-quadrant-title">Back Home · Shared</span>
-                          <span className="matrix-quadrant-spend">{money.format(analytics.matrix.backHome.shared.spend)}</span>
-                          <span className="matrix-quadrant-meta">{analytics.matrix.backHome.shared.count} rides</span>
-                        </div>
-                        <div className="matrix-mini-quadrant">
-                          <span className="matrix-quadrant-title">Back Home · Solo</span>
-                          <span className="matrix-quadrant-spend">{money.format(analytics.matrix.backHome.solo.spend)}</span>
-                          <span className="matrix-quadrant-meta">{analytics.matrix.backHome.solo.count} rides</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+              {/* Bus Benchmark (EGP 42,000) */}
+              <section className="bus-benchmark-wrap" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", boxShadow: "var(--shadow-sm)" }}>
+                <div className="bus-benchmark-hero">
+                  <span style={{ fontSize: "11px", color: "var(--muted)" }}>University Bus Benchmark (EGP 42,000)</span>
+                  <span className="bus-benchmark-num">{money.format(analytics.busSavingsVal)}</span>
+                  <small style={{ color: "var(--muted)", fontSize: "11px" }}>Saved so far vs taking the college bus pass</small>
                 </div>
-
-                {/* 2. Solo vs Shared Economics */}
-                <div className="accordion-item">
-                  <button
-                    type="button"
-                    className="accordion-trigger"
-                    onClick={() => toggleAccordion("economics")}
-                    aria-expanded={accordionsOpen.economics}
-                  >
-                    <div className="accordion-trigger-left">
-                      <span className="accordion-trigger-title">
-                        <span>👥 / 👤</span> Solo vs Shared Economics
-                      </span>
-                      <span className="accordion-trigger-preview">
-                        Saved {money.format(analytics.sharingSavingsVal)} by splitting rides
-                      </span>
-                    </div>
-                    <span className={`accordion-chevron ${accordionsOpen.economics ? "open" : ""}`}>▼</span>
-                  </button>
-                  {accordionsOpen.economics && (
-                    <div className="accordion-content">
-                      <div className="duo-comparison-grid">
-                        <div className="duo-mini-box">
-                          <span className="duo-mini-title">Shared Rides</span>
-                          <span className="duo-mini-spend">{money.format(analytics.sharedSpendVal)}</span>
-                          <span className="duo-mini-meta">{analytics.sharedRidesCount} rides · {money.format(analytics.sharedAvgCost)} avg</span>
-                        </div>
-                        <div className="duo-mini-box">
-                          <span className="duo-mini-title">Solo Rides</span>
-                          <span className="duo-mini-spend">{money.format(analytics.soloSpendVal)}</span>
-                          <span className="duo-mini-meta">{analytics.soloRidesCount} rides · {money.format(analytics.soloAvgCost)} avg</span>
-                        </div>
-                      </div>
-                      <div className="sharing-savings-banner">
-                        <div className="sharing-savings-header">
-                          <b>Sharing Benefit</b>
-                          <strong>{money.format(analytics.sharingSavingsVal)} saved</strong>
-                        </div>
-                        <small>Splitting rides cut total commute expenses in half compared to solo booking.</small>
-                      </div>
-                    </div>
-                  )}
+                <div className="bus-benchmark-meter">
+                  <div className="bus-meter-shared" style={{ width: `${analytics.sharedBusUsedPct}%` }} />
+                  <div className="bus-meter-solo" style={{ width: `${analytics.soloBusUsedPct}%` }} />
                 </div>
-
-                {/* 3. Bus Benchmark (EGP 42,000) */}
-                <div className="accordion-item">
-                  <button
-                    type="button"
-                    className="accordion-trigger"
-                    onClick={() => toggleAccordion("bus")}
-                    aria-expanded={accordionsOpen.bus}
-                  >
-                    <div className="accordion-trigger-left">
-                      <span className="accordion-trigger-title">
-                        <span>🚌</span> College Bus Benchmark (EGP 42,000)
-                      </span>
-                      <span className="accordion-trigger-preview">
-                        Saved {money.format(analytics.busSavingsVal)} ({analytics.busSavedPctVal.toFixed(1)}% remaining)
-                      </span>
-                    </div>
-                    <span className={`accordion-chevron ${accordionsOpen.bus ? "open" : ""}`}>▼</span>
-                  </button>
-                  {accordionsOpen.bus && (
-                    <div className="accordion-content">
-                      <div className="bus-benchmark-wrap">
-                        <div className="bus-benchmark-hero">
-                          <span style={{ fontSize: "11px", color: "var(--muted)" }}>Cumulative savings vs 42K bus pass</span>
-                          <span className="bus-benchmark-num">{money.format(analytics.busSavingsVal)}</span>
-                        </div>
-                        <div className="bus-benchmark-meter">
-                          <div className="bus-meter-shared" style={{ width: `${analytics.sharedBusUsedPct}%` }} />
-                          <div className="bus-meter-solo" style={{ width: `${analytics.soloBusUsedPct}%` }} />
-                        </div>
-                        <div className="bus-meter-labels">
-                          <span>{analytics.busUsedPctVal.toFixed(1)}% spent ({money.format(analytics.allTimeTotalSpend)})</span>
-                          <span>{analytics.busSavedPctVal.toFixed(1)}% saved</span>
-                        </div>
-                        <div className="bus-rows-list">
-                          <div className="bus-row">
-                            <span>Annual Bus Fee</span>
-                            <b>{money.format(BUS_BENCHMARK)}</b>
-                          </div>
-                          <div className="bus-row">
-                            <span>All-Time Commute Spend</span>
-                            <b>{money.format(analytics.allTimeTotalSpend)}</b>
-                          </div>
-                          <div className="bus-row">
-                            <span>Net Money Saved</span>
-                            <b style={{ color: "var(--green)" }}>{money.format(analytics.busSavingsVal)}</b>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                <div className="bus-meter-labels">
+                  <span>{analytics.busUsedPctVal.toFixed(1)}% spent ({money.format(analytics.allTimeTotalSpend)})</span>
+                  <span>{analytics.busSavedPctVal.toFixed(1)}% remaining</span>
                 </div>
-
-                {/* 4. Factual Insights */}
-                <div className="accordion-item">
-                  <button
-                    type="button"
-                    className="accordion-trigger"
-                    onClick={() => toggleAccordion("insights")}
-                    aria-expanded={accordionsOpen.insights}
-                  >
-                    <div className="accordion-trigger-left">
-                      <span className="accordion-trigger-title">
-                        <span>⚡</span> Factual Commute Insights
-                      </span>
-                      <span className="accordion-trigger-preview">
-                        {analytics.factualInsights.length} data points calculated
-                      </span>
-                    </div>
-                    <span className={`accordion-chevron ${accordionsOpen.insights ? "open" : ""}`}>▼</span>
-                  </button>
-                  {accordionsOpen.insights && (
-                    <div className="accordion-content">
-                      <div className="insights-stack">
-                        {analytics.factualInsights.map((insight, idx) => (
-                          <div key={idx} className="insight-pill">
-                            <span className="insight-bullet" />
-                            <span>{insight}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </div>
+              </section>
             </main>
           )}
 
-          {/* TAB 3: SPLIT (Settlement and Fair Balances) */}
-          {activeTab === "split" && (
-            <main className="tab-content" key="tab-split">
+          {/* TAB 3: TRENDS (Charts, Drawings, Visual Commuter Breakdown & Scope) */}
+          {activeTab === "trends" && (
+            <main className="tab-content" key="tab-trends">
+              {/* Time Horizon Pills */}
+              <div className="filter-bar">
+                {(["week", "4weeks", "3months", "lifetime"] as TimeHorizon[]).map((hz) => (
+                  <button
+                    key={hz}
+                    type="button"
+                    className={`filter-chip ${timeHorizon === hz ? "active" : ""}`}
+                    onClick={() => { setTimeHorizon(hz); setSelectedDayIso(null); }}
+                  >
+                    {hz === "week" ? "This Week" : hz === "4weeks" ? "4 Weeks" : hz === "3months" ? "3 Months" : "All time"}
+                  </button>
+                ))}
+              </div>
+
+              {/* Trio KPI Cards: Total Spent, Shared Only, Solo Only */}
+              <div className="analytics-summary-trio">
+                <div className="trio-card primary-trio">
+                  <span className="trio-label">Total Spent</span>
+                  <strong className="trio-value">{money.format(analytics.totalSpend)}</strong>
+                  <small className="trio-sub">Shared + Solo ({analytics.totalRides} rides)</small>
+                </div>
+                <div className="trio-card">
+                  <span className="trio-label">Shared Only</span>
+                  <strong className="trio-value">{money.format(analytics.sharedSpendVal)}</strong>
+                  <small className="trio-sub">{analytics.sharedRidesCount} rides</small>
+                </div>
+                <div className="trio-card">
+                  <span className="trio-label">Solo ({soloScope === "mine" ? "Mine" : soloScope === "others" ? "Other's" : "All"})</span>
+                  <strong className="trio-value">{money.format(analytics.soloSpendVal)}</strong>
+                  <small className="trio-sub">{analytics.soloRidesCount} rides</small>
+                </div>
+              </div>
+
+              {/* 1. INTERACTIVE SVG SPENDING TREND CHART (Drawing / Chart) */}
+              <section className="trend-chart-card">
+                <div className="trend-chart-header">
+                  <div>
+                    <h4 className="trend-chart-title">Spending Curve & Trends</h4>
+                    <span className="trend-chart-subtitle">Cumulative personal transportation spend</span>
+                  </div>
+                  <div className="trend-chart-stat">
+                    <span className="trend-chart-stat-val">{money.format(analytics.totalSpend)}</span>
+                    <span className="trend-chart-stat-sub">{analytics.horizonLabel}</span>
+                  </div>
+                </div>
+
+                {analytics.spendingTrend.length === 0 ? (
+                  <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: "12px" }}>
+                    No rides recorded in this time window.
+                  </div>
+                ) : (
+                  <div className="trend-chart-container">
+                    {activeTrendDot && (
+                      <div className="trend-tooltip">
+                        <span>{activeTrendDot.label}</span>
+                        <span>·</span>
+                        <span>+{money.format(activeTrendDot.amount)}</span>
+                        <span>·</span>
+                        <span className="trend-tooltip-val">Total {money.format(activeTrendDot.cumulative)}</span>
+                      </div>
+                    )}
+                    {(() => {
+                      const trend = analytics.spendingTrend;
+                      const maxVal = Math.max(...trend.map((p) => p.cumulative), 1);
+                      const width = 340;
+                      const height = 130;
+                      const padLeft = 10;
+                      const padRight = 10;
+                      const padTop = 15;
+                      const padBottom = 20;
+                      const chartW = width - padLeft - padRight;
+                      const chartH = height - padTop - padBottom;
+
+                      const coords = trend.map((p, idx) => {
+                        const x = trend.length === 1 ? padLeft + chartW / 2 : padLeft + (idx / (trend.length - 1)) * chartW;
+                        const y = padTop + chartH - (p.cumulative / maxVal) * chartH;
+                        return { x, y, point: p };
+                      });
+
+                      const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
+                      const areaPath = `${linePath} L ${coords[coords.length - 1].x.toFixed(1)},${(padTop + chartH).toFixed(1)} L ${coords[0].x.toFixed(1)},${(padTop + chartH).toFixed(1)} Z`;
+
+                      return (
+                        <svg className="trend-chart-svg" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+                          <defs>
+                            <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="0%" stopColor="#2d6a4f" stopOpacity="0.28" />
+                              <stop offset="100%" stopColor="#2d6a4f" stopOpacity="0.0" />
+                            </linearGradient>
+                          </defs>
+
+                          {/* Horizontal Grid lines */}
+                          <line x1={padLeft} y1={padTop} x2={width - padRight} y2={padTop} stroke="#ede9df" strokeDasharray="3 3" />
+                          <line x1={padLeft} y1={padTop + chartH / 2} x2={width - padRight} y2={padTop + chartH / 2} stroke="#ede9df" strokeDasharray="3 3" />
+                          <line x1={padLeft} y1={padTop + chartH} x2={width - padRight} y2={padTop + chartH} stroke="#dcd7c9" />
+
+                          {/* Gradient Fill & Line */}
+                          <path d={areaPath} fill="url(#trendGradient)" />
+                          <path d={linePath} fill="none" stroke="#2d6a4f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+
+                          {/* Interactive Points */}
+                          {coords.map((c, i) => {
+                            const isSelected = activeTrendDot?.date === c.point.date;
+                            return (
+                              <circle
+                                key={i}
+                                cx={c.x}
+                                cy={c.y}
+                                r={isSelected ? 6 : 4}
+                                className={`trend-dot ${isSelected ? "active" : ""}`}
+                                fill={isSelected ? "#d9ff70" : "#ffffff"}
+                                stroke="#2d6a4f"
+                                strokeWidth={isSelected ? "3" : "2.5"}
+                                onClick={() => setActiveTrendDot(isSelected ? null : c.point)}
+                              />
+                            );
+                          })}
+                        </svg>
+                      );
+                    })()}
+                  </div>
+                )}
+              </section>
+
+              {/* 2. VISUAL COMMUTER ROUTE DRAWING (Campus vs Home) */}
+              <section className="commute-diagram-card">
+                <div className="section-header-row" style={{ margin: 0 }}>
+                  <h4 className="trend-chart-title">Commute Route Breakdown</h4>
+                  <span className="section-header-meta">Direction split</span>
+                </div>
+                <div className="commute-routes-grid">
+                  {/* Route 1: To Campus */}
+                  <div className="commute-route-box campus">
+                    <div className="commute-route-header">
+                      <div className="commute-route-icon">🎓</div>
+                      <div>
+                        <span className="commute-route-title">Morning to Campus</span>
+                        <div className="commute-route-spend">{money.format(analytics.campusSpend)}</div>
+                      </div>
+                    </div>
+                    <div className="commute-route-meta">
+                      <span>{analytics.campusTrips.length} rides</span>
+                      <span>{analytics.campusTrips.length > 0 ? money.format(analytics.campusSpend / analytics.campusTrips.length) : "0"} avg</span>
+                    </div>
+                    <div className="commute-split-bar">
+                      <div className="commute-split-shared" style={{ width: `${analytics.campusTrips.length > 0 ? (analytics.campusSharedCount / analytics.campusTrips.length) * 100 : 50}%` }} title={`${analytics.campusSharedCount} shared`} />
+                      <div className="commute-split-solo" style={{ width: `${analytics.campusTrips.length > 0 ? (analytics.campusSoloCount / analytics.campusTrips.length) * 100 : 50}%` }} title={`${analytics.campusSoloCount} solo`} />
+                    </div>
+                  </div>
+
+                  {/* Route 2: Back Home */}
+                  <div className="commute-route-box home">
+                    <div className="commute-route-header">
+                      <div className="commute-route-icon">🏡</div>
+                      <div>
+                        <span className="commute-route-title">Evening Back Home</span>
+                        <div className="commute-route-spend">{money.format(analytics.homeSpend)}</div>
+                      </div>
+                    </div>
+                    <div className="commute-route-meta">
+                      <span>{analytics.homeTrips.length} rides</span>
+                      <span>{analytics.homeTrips.length > 0 ? money.format(analytics.homeSpend / analytics.homeTrips.length) : "0"} avg</span>
+                    </div>
+                    <div className="commute-split-bar">
+                      <div className="commute-split-shared" style={{ width: `${analytics.homeTrips.length > 0 ? (analytics.homeSharedCount / analytics.homeTrips.length) * 100 : 50}%` }} title={`${analytics.homeSharedCount} shared`} />
+                      <div className="commute-split-solo" style={{ width: `${analytics.homeTrips.length > 0 ? (analytics.homeSoloCount / analytics.homeTrips.length) * 100 : 50}%` }} title={`${analytics.homeSoloCount} solo`} />
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 3. CARPOOL SAVINGS COMPARISON DRAWING */}
+              <section className="carpool-savings-card">
+                <div className="section-header-row" style={{ margin: 0 }}>
+                  <h4 className="trend-chart-title">Carpool Economics vs Solo Booking</h4>
+                  <span className="section-header-meta">50% shared savings</span>
+                </div>
+                <div className="carpool-compare-row">
+                  <div className="carpool-compare-item">
+                    <div className="carpool-compare-label-row">
+                      <span>Shared Rides Spend (Your 50% split)</span>
+                      <b>{money.format(analytics.sharedSpendVal / 2)}</b>
+                    </div>
+                    <div className="carpool-bar-track">
+                      <div className="carpool-bar-fill-actual" style={{ width: "50%" }} />
+                    </div>
+                  </div>
+                  <div className="carpool-compare-item">
+                    <div className="carpool-compare-label-row">
+                      <span style={{ color: "var(--muted)" }}>Equivalent Solo Full Fare (If riding alone)</span>
+                      <b style={{ color: "var(--muted)" }}>{money.format(analytics.sharedSpendVal)}</b>
+                    </div>
+                    <div className="carpool-bar-track">
+                      <div className="carpool-bar-fill-solo" style={{ width: "100%" }} />
+                    </div>
+                  </div>
+                </div>
+                <div className="carpool-saved-callout">
+                  <div>
+                    <div style={{ fontSize: "12px", fontWeight: 600 }}>Total Money Kept in Your Pockets</div>
+                    <small style={{ opacity: 0.75, fontSize: "10px" }}>By carpooling together instead of solo Uber bookings</small>
+                  </div>
+                  <span className="carpool-saved-badge">+{money.format(analytics.sharingSavingsVal)} saved</span>
+                </div>
+              </section>
+
+              {/* 4. SOLO RIDES SCOPE SELECTOR & DEEP DIVE */}
+              <section style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "var(--shadow-sm)" }}>
+                <div className="solo-scope-wrap">
+                  <span className="solo-scope-label">Solo Rides Filter</span>
+                  <div className="solo-scope-bar">
+                    <button
+                      type="button"
+                      className={`solo-scope-chip ${soloScope === "mine" ? "active" : ""}`}
+                      onClick={() => setSoloScope("mine")}
+                    >
+                      👤 My solo only
+                    </button>
+                    <button
+                      type="button"
+                      className={`solo-scope-chip ${soloScope === "all" ? "active" : ""}`}
+                      onClick={() => setSoloScope("all")}
+                    >
+                      👥 All solo
+                    </button>
+                    <button
+                      type="button"
+                      className={`solo-scope-chip ${soloScope === "others" ? "active" : ""}`}
+                      onClick={() => setSoloScope("others")}
+                    >
+                      🤝 Others solo
+                    </button>
+                  </div>
+                </div>
+                <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)" }}>
+                  {soloScope === "mine" && "Calculating solo rides taken exclusively by you."}
+                  {soloScope === "all" && "Calculating all solo rides taken by any member in this group."}
+                  {soloScope === "others" && "Calculating solo rides taken by your co-pilot."}
+                </p>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "4px" }}>
+                  <div style={{ background: "#fbf9f4", padding: "10px 12px", borderRadius: "8px", border: "1px solid #ede8dc" }}>
+                    <span style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600, fontFamily: '"DM Mono", monospace' }}>Spend</span>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--ink)", marginTop: "2px" }}>{money.format(analytics.soloSpendVal)}</div>
+                  </div>
+                  <div style={{ background: "#fbf9f4", padding: "10px 12px", borderRadius: "8px", border: "1px solid #ede8dc" }}>
+                    <span style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600, fontFamily: '"DM Mono", monospace' }}>Rides & Average</span>
+                    <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--ink)", marginTop: "2px" }}>
+                      {analytics.soloRidesCount} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--muted)" }}>({money.format(analytics.soloAvgCost)})</span>
+                    </div>
+                  </div>
+                </div>
+              </section>
+
+              {/* 5. 2x2 DIRECTION & MODE MATRIX */}
+              <section style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "var(--shadow-sm)" }}>
+                <div className="section-header-row" style={{ margin: 0 }}>
+                  <h4 className="trend-chart-title">Direction & Mode Matrix</h4>
+                  <span className="section-header-meta">Campus vs Home × Shared vs Solo</span>
+                </div>
+                <div className="matrix-mini-grid">
+                  <div className="matrix-mini-quadrant">
+                    <span className="matrix-quadrant-title">To Campus · Shared</span>
+                    <span className="matrix-quadrant-spend">{money.format(analytics.matrix.toCampus.shared.spend)}</span>
+                    <span className="matrix-quadrant-meta">{analytics.matrix.toCampus.shared.count} rides</span>
+                  </div>
+                  <div className="matrix-mini-quadrant">
+                    <span className="matrix-quadrant-title">To Campus · Solo</span>
+                    <span className="matrix-quadrant-spend">{money.format(analytics.matrix.toCampus.solo.spend)}</span>
+                    <span className="matrix-quadrant-meta">{analytics.matrix.toCampus.solo.count} rides</span>
+                  </div>
+                  <div className="matrix-mini-quadrant">
+                    <span className="matrix-quadrant-title">Back Home · Shared</span>
+                    <span className="matrix-quadrant-spend">{money.format(analytics.matrix.backHome.shared.spend)}</span>
+                    <span className="matrix-quadrant-meta">{analytics.matrix.backHome.shared.count} rides</span>
+                  </div>
+                  <div className="matrix-mini-quadrant">
+                    <span className="matrix-quadrant-title">Back Home · Solo</span>
+                    <span className="matrix-quadrant-spend">{money.format(analytics.matrix.backHome.solo.spend)}</span>
+                    <span className="matrix-quadrant-meta">{analytics.matrix.backHome.solo.count} rides</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* 6. FACTUAL COMMUTE INSIGHTS */}
+              <section style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "var(--shadow-sm)" }}>
+                <div className="section-header-row" style={{ margin: 0 }}>
+                  <h4 className="trend-chart-title">Smart Routine Insights</h4>
+                  <span className="section-header-meta">{analytics.factualInsights.length} observations</span>
+                </div>
+                <div className="insights-stack">
+                  {analytics.factualInsights.map((insight, idx) => (
+                    <div key={idx} className="insight-pill">
+                      <span className="insight-bullet" />
+                      <span>{insight}</span>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            </main>
+          )}
+
+          {/* TAB 4: SPACE (Group Info, Budget, Settings, Auth) */}
+          {activeTab === "space" && (
+            <main className="tab-content" key="tab-space">
+              {/* Settlement Status Card */}
               <section className="split-summary-card">
                 <div className="section-header-row">
                   <h3 className="section-header-title">Settlement status</h3>
@@ -1054,7 +1236,7 @@ export default function Home() {
                   </span>
                   <div style={{ fontSize: "24px", fontWeight: 700, letterSpacing: "-1px", color: "var(--ink)" }}>
                     {stats.net === 0
-                      ? "All square"
+                      ? "All square 🎉"
                       : stats.net > 0
                       ? `${otherMember?.display_name ?? "Khaled"} owes you ${money.format(stats.net)}`
                       : `You owe ${otherMember?.display_name ?? "Khaled"} ${money.format(Math.abs(stats.net))}`}
@@ -1062,83 +1244,24 @@ export default function Home() {
                   <span style={{ fontSize: "12px", color: "var(--muted)" }}>
                     {stats.net === 0
                       ? "No pending shared rides right now."
-                      : "Total balance across unsettled shared rides."}
+                      : `${unsettledTrips.length} unsettled shared ${unsettledTrips.length === 1 ? "ride" : "rides"}.`}
                   </span>
+                  {unsettledTrips.length > 0 && (
+                    <button
+                      type="button"
+                      className="sheet-submit-btn"
+                      style={{ marginTop: "8px", padding: "8px 14px", fontSize: "12px" }}
+                      onClick={() => {
+                        setActiveTab("rides");
+                        setRidesFilter("unsettled");
+                      }}
+                    >
+                      Review Unsettled Rides in Feed
+                    </button>
+                  )}
                 </div>
               </section>
 
-              <div className="section-header-row">
-                <h3 className="section-header-title">Unsettled shared rides</h3>
-                <span className="section-header-meta">{unsettledTrips.length} pending</span>
-              </div>
-
-              {unsettledTrips.length === 0 ? (
-                <div className="empty-feed">
-                  <h4>All caught up! 🎉</h4>
-                  <p>Every shared ride between Omar and Khaled has been settled.</p>
-                </div>
-              ) : (
-                <div className="trip-list">
-                  {unsettledTrips.map((trip) => {
-                    const payer = members.find((m) => m.user_id === trip.paid_by)?.display_name ?? "Unknown";
-                    const isCurrentUserDebtor = trip.paid_by !== currentUserId;
-                    const debtorId = members.find((m) => m.user_id !== trip.paid_by)?.user_id;
-                    const debtorName = members.find((m) => m.user_id === debtorId)?.display_name ?? "co-pilot";
-
-                    return (
-                      <article key={trip.id} className="trip-card">
-                        <div className="trip-card-main">
-                          <div className="trip-card-left">
-                            <div className={`trip-direction-badge ${trip.direction}`}>
-                              {trip.direction === "campus" ? "🎓" : "🏡"}
-                            </div>
-                            <div className="trip-card-info">
-                              <span className="trip-card-title">
-                                {trip.direction === "campus" ? "To campus" : "Back home"}
-                              </span>
-                              <span className="trip-card-meta">
-                                {dateTimeFormatter.format(new Date(trip.ride_at))}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="trip-card-price">
-                            <span className="trip-card-amount">{money.format(trip.amount / 2)}</span>
-                            <span className="trip-card-split-label">half owed</span>
-                          </div>
-                        </div>
-                        <div className="trip-card-footer">
-                          <span className="trip-payer-tag">
-                            Paid by <b>{payer}</b> (Total {money.format(trip.amount)})
-                          </span>
-                          {isCurrentUserDebtor ? (
-                            <button
-                              type="button"
-                              className="trip-settle-btn"
-                              onClick={() => void settleTrip(trip, currentUserId)}
-                            >
-                              I paid my {money.format(trip.amount / 2)}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="trip-settle-btn"
-                              onClick={() => void settleTrip(trip, debtorId)}
-                            >
-                              Mark {debtorName} paid
-                            </button>
-                          )}
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </main>
-          )}
-
-          {/* TAB 4: SPACE (Group Info, Budget, Settings, Auth) */}
-          {activeTab === "space" && (
-            <main className="tab-content" key="tab-space">
               <section className="space-card">
                 <div className="space-info-group">
                   <span className="balance-hero-eyebrow">Shared Ride Space</span>
@@ -1250,11 +1373,11 @@ export default function Home() {
 
         <button
           type="button"
-          className={`nav-tab-btn ${activeTab === "analytics" ? "active" : ""}`}
-          onClick={() => setActiveTab("analytics")}
+          className={`nav-tab-btn ${activeTab === "budget" ? "active" : ""}`}
+          onClick={() => setActiveTab("budget")}
         >
-          <span className="nav-tab-icon">📊</span>
-          <span className="nav-tab-label">Analytics</span>
+          <span className="nav-tab-icon">🎯</span>
+          <span className="nav-tab-label">Budget</span>
         </button>
 
         {/* Center Prominent FAB for Logging a Ride Fast */}
@@ -1269,11 +1392,11 @@ export default function Home() {
 
         <button
           type="button"
-          className={`nav-tab-btn ${activeTab === "split" ? "active" : ""}`}
-          onClick={() => setActiveTab("split")}
+          className={`nav-tab-btn ${activeTab === "trends" ? "active" : ""}`}
+          onClick={() => setActiveTab("trends")}
         >
-          <span className="nav-tab-icon">⚖️</span>
-          <span className="nav-tab-label">Split</span>
+          <span className="nav-tab-icon">📈</span>
+          <span className="nav-tab-label">Trends</span>
         </button>
 
         <button
@@ -1380,7 +1503,7 @@ function BottomSheetWindow({
     setClosing(true);
     setTimeout(() => {
       close();
-    }, 220);
+    }, 240);
   }
 
   // Prevent background scroll and page jumps when bottom sheet is open
@@ -1394,8 +1517,12 @@ function BottomSheetWindow({
 
   async function handleSubmitRide(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    handleClose();
+    if (closing) return;
+    setClosing(true);
     await onAdd(e);
+    setTimeout(() => {
+      close();
+    }, 240);
   }
 
   return (

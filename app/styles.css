@@ -172,12 +172,19 @@ button {
   display: flex;
   flex-direction: column;
   gap: 18px;
-  animation: tabFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: tabFadeSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform, opacity;
 }
 
-@keyframes tabFadeIn {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
+@keyframes tabFadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(8px) scale(0.996);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 
 /* HERO BALANCE CARD */
@@ -1365,12 +1372,11 @@ button {
   justify-content: flex-end;
   overscroll-behavior: contain;
   touch-action: none;
-  animation: backdropFadeIn 0.22s ease forwards;
-  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: backdropFadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 .bottom-sheet-backdrop.closing {
-  opacity: 0;
+  animation: backdropFadeOut 0.25s cubic-bezier(0.32, 0.72, 0, 1) forwards;
   pointer-events: none;
 }
 
@@ -1379,26 +1385,49 @@ button {
   max-width: var(--app-max-width);
   margin: 0 auto;
   background: var(--cream);
-  border-radius: 24px 24px 0 0;
+  border-radius: 26px 26px 0 0;
   padding: 16px 20px calc(24px + env(safe-area-inset-bottom, 16px));
-  max-height: 85vh;
-  max-height: 85dvh;
+  max-height: 88vh;
+  max-height: 88dvh;
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
-  animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-  transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+  box-shadow: 0 -12px 48px rgba(0, 0, 0, 0.26);
+  animation: sheetSlideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  will-change: transform;
 }
 
 .bottom-sheet.closing {
-  animation: none;
-  transform: translateY(100%);
+  animation: sheetSlideDown 0.25s cubic-bezier(0.32, 0.72, 0, 1) forwards;
+  pointer-events: none;
 }
 
 @keyframes sheetSlideUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
+  0% {
+    transform: translateY(100%);
+  }
+  100% {
+    transform: translateY(0);
+  }
+}
+
+@keyframes sheetSlideDown {
+  0% {
+    transform: translateY(0);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
+@keyframes backdropFadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes backdropFadeOut {
+  0% { opacity: 1; }
+  100% { opacity: 0; }
 }
 
 .bottom-sheet-handle {
@@ -1708,3 +1737,377 @@ button {
   gap: 10px;
   margin-top: 14px;
 }
+
+/* ========================================================
+   SOLO SCOPE SEGMENTED PILLS
+   ======================================================== */
+.solo-scope-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.solo-scope-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: "DM Mono", monospace;
+}
+
+.solo-scope-bar {
+  display: inline-flex;
+  background: #ede9dc;
+  padding: 3px;
+  border-radius: 999px;
+  gap: 2px;
+}
+
+.solo-scope-chip {
+  border: 0;
+  background: none;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  white-space: nowrap;
+}
+
+.solo-scope-chip.active {
+  background: #ffffff;
+  color: var(--ink);
+  font-weight: 700;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+/* ========================================================
+   INTERACTIVE SVG SPENDING TREND CHART
+   ======================================================== */
+.trend-chart-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-sm);
+  position: relative;
+  overflow: hidden;
+}
+
+.trend-chart-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.trend-chart-title {
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+  margin: 0;
+  color: var(--ink);
+}
+
+.trend-chart-subtitle {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  display: block;
+}
+
+.trend-chart-stat {
+  text-align: right;
+}
+
+.trend-chart-stat-val {
+  font-size: 18px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--green);
+  display: block;
+}
+
+.trend-chart-stat-sub {
+  font-size: 10px;
+  color: var(--muted);
+  font-family: "DM Mono", monospace;
+}
+
+.trend-chart-container {
+  width: 100%;
+  height: 160px;
+  position: relative;
+  touch-action: pan-y;
+}
+
+.trend-chart-svg {
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.trend-dot {
+  cursor: pointer;
+  transition: transform 0.15s ease, r 0.15s ease;
+}
+
+.trend-dot:hover,
+.trend-dot.active {
+  r: 6px;
+  stroke: var(--ink);
+  stroke-width: 3px;
+  fill: var(--lime);
+}
+
+.trend-tooltip {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--ink);
+  color: #fff;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 11px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  pointer-events: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+  animation: tabFadeSlide 0.15s ease;
+  z-index: 10;
+}
+
+.trend-tooltip-val {
+  color: var(--lime);
+  font-weight: 700;
+}
+
+/* ========================================================
+   VISUAL COMMUTER ROUTE DRAWING (Campus vs Home)
+   ======================================================== */
+.commute-diagram-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: var(--shadow-sm);
+}
+
+.commute-routes-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.commute-route-box {
+  background: #faf8f2;
+  border: 1px solid #ede9df;
+  border-radius: var(--radius-md);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+}
+
+.commute-route-box.campus {
+  border-top: 3px solid #2d6a4f;
+}
+
+.commute-route-box.home {
+  border-top: 3px solid #b7791f;
+}
+
+.commute-route-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.commute-route-icon {
+  font-size: 18px;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+}
+
+.commute-route-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.commute-route-spend {
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.6px;
+  color: var(--ink);
+  margin-top: 2px;
+}
+
+.commute-route-meta {
+  font-size: 11px;
+  color: var(--muted);
+  display: flex;
+  justify-content: space-between;
+}
+
+.commute-split-bar {
+  height: 6px;
+  width: 100%;
+  background: #e2ded4;
+  border-radius: 3px;
+  overflow: hidden;
+  display: flex;
+  margin-top: 4px;
+}
+
+.commute-split-shared {
+  background: var(--green);
+  height: 100%;
+}
+
+.commute-split-solo {
+  background: #d97706;
+  height: 100%;
+}
+
+/* ========================================================
+   CARPOOL SAVINGS COMPARISON DRAWING
+   ======================================================== */
+.carpool-savings-card {
+  background: #f8faf8;
+  border: 1px solid #d1e7dd;
+  border-radius: var(--radius-lg);
+  padding: 18px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.carpool-compare-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.carpool-compare-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.carpool-compare-label-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.carpool-bar-track {
+  width: 100%;
+  height: 10px;
+  background: #e8e6df;
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.carpool-bar-fill-actual {
+  height: 100%;
+  background: var(--green);
+  border-radius: 5px;
+}
+
+.carpool-bar-fill-solo {
+  height: 100%;
+  background: #b0aba0;
+  border-radius: 5px;
+}
+
+.carpool-saved-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--ink);
+  color: #fff;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  margin-top: 4px;
+}
+
+.carpool-saved-badge {
+  background: var(--lime);
+  color: var(--ink);
+  font-weight: 800;
+  font-size: 11px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ========================================================
+   RIDES TAB TOP SETTLEMENT STRIP
+   ======================================================== */
+.rides-settlement-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 14px;
+  background: #fdfaf2;
+  border: 1px solid #ebd9a2;
+  border-radius: var(--radius-md);
+  margin-bottom: 2px;
+  animation: tabFadeSlide 0.25s ease;
+}
+
+.rides-settlement-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.rides-settlement-icon {
+  font-size: 16px;
+}
+
+.rides-settlement-btn {
+  border: 0;
+  background: var(--ink);
+  color: var(--lime);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 0.15s ease;
+  white-space: nowrap;
+}
+
+.rides-settlement-btn:active {
+  transform: scale(0.95);
+}
+

@@ -485,3 +485,69 @@ export function generateFactualInsights(params: {
 
   return insights;
 }
+
+export type SoloScope = "mine" | "all" | "others";
+
+/**
+ * Filters solo trips according to scope:
+ * - "mine": only solo trips taken by currentUserId
+ * - "others": only solo trips taken by someone other than currentUserId
+ * - "all": all solo trips in the group
+ */
+export function filterSoloTrips(trips: Trip[], scope: SoloScope, currentUserId?: string): Trip[] {
+  if (!trips || trips.length === 0) return [];
+  const soloTrips = trips.filter((t) => t.trip_mode === "solo");
+  if (scope === "mine") {
+    return currentUserId ? soloTrips.filter((t) => t.solo_by === currentUserId) : soloTrips;
+  }
+  if (scope === "others") {
+    return currentUserId ? soloTrips.filter((t) => t.solo_by !== currentUserId) : [];
+  }
+  return soloTrips;
+}
+
+export type TrendDataPoint = {
+  date: string;
+  label: string;
+  amount: number;
+  cumulative: number;
+};
+
+/**
+ * Computes cumulative spending trend points across trips sorted chronologically.
+ * If memberId is provided, calculates personal share (half of shared + own solo).
+ */
+export function computeSpendingTrend(trips: Trip[], memberId?: string): TrendDataPoint[] {
+  if (!trips || trips.length === 0) return [];
+
+  const sorted = [...trips].sort((a, b) => new Date(a.ride_at).getTime() - new Date(b.ride_at).getTime());
+  const byDate = new Map<string, { label: string; amount: number }>();
+
+  for (const t of sorted) {
+    const key = toLocalDateKey(t.ride_at);
+    if (!key) continue;
+    const spend = memberId ? memberTripSpend(t, memberId) : (Number(t.amount) || 0);
+    const dateObj = new Date(t.ride_at);
+    const label = dateObj.toLocaleDateString("en", { month: "short", day: "numeric" });
+    const existing = byDate.get(key);
+    if (existing) {
+      existing.amount += spend;
+    } else {
+      byDate.set(key, { label, amount: spend });
+    }
+  }
+
+  let running = 0;
+  const points: TrendDataPoint[] = [];
+  for (const [date, val] of byDate.entries()) {
+    running += val.amount;
+    points.push({
+      date,
+      label: val.label,
+      amount: val.amount,
+      cumulative: running,
+    });
+  }
+
+  return points;
+}

@@ -22,6 +22,8 @@ import {
   computeSpendingByDay,
   getAcademicWeekBounds,
   toLocalDateKey,
+  filterSoloTrips,
+  computeSpendingTrend,
   BUS_BENCHMARK,
 } from "./analytics";
 import type { Member, Trip } from "./types";
@@ -178,3 +180,41 @@ test("computeSpendingByDay assigns Monday Sept 21 ride to Monday, not Tuesday", 
   assert.equal(tuesday.ridesCount, 0);
   assert.equal(tuesday.actualSpend, 0);
 });
+
+test("filterSoloTrips handles mine, others, and all scopes accurately", () => {
+  const sampleTrips: Trip[] = [
+    { id: "s1", ride_at: "2026-09-10T08:00:00.000Z", direction: "campus", amount: 100, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "omar" },
+    { id: "s2", ride_at: "2026-09-11T09:00:00.000Z", direction: "home", amount: 90, paid_by: "khaled", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "khaled" },
+    { id: "s3", ride_at: "2026-09-12T10:00:00.000Z", direction: "campus", amount: 120, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+  ];
+
+  const mine = filterSoloTrips(sampleTrips, "mine", "omar");
+  assert.equal(mine.length, 1);
+  assert.equal(mine[0].id, "s1");
+
+  const others = filterSoloTrips(sampleTrips, "others", "omar");
+  assert.equal(others.length, 1);
+  assert.equal(others[0].id, "s2");
+
+  const all = filterSoloTrips(sampleTrips, "all", "omar");
+  assert.equal(all.length, 2);
+});
+
+test("computeSpendingTrend aggregates daily amounts and calculates cumulative spend", () => {
+  const sampleTrips: Trip[] = [
+    { id: "t1", ride_at: "2026-09-10T08:00:00.000Z", direction: "campus", amount: 100, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+    { id: "t2", ride_at: "2026-09-10T16:00:00.000Z", direction: "home", amount: 80, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "omar" },
+    { id: "t3", ride_at: "2026-09-11T09:00:00.000Z", direction: "campus", amount: 120, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+  ];
+
+  // Personal spend for Omar:
+  // Day 1 (Sept 10): 100/2 (50) + 80 solo (80) = 130
+  // Day 2 (Sept 11): 120/2 (60) = 60. Cumulative: 130 + 60 = 190
+  const trend = computeSpendingTrend(sampleTrips, "omar");
+  assert.equal(trend.length, 2);
+  assert.equal(trend[0].amount, 130);
+  assert.equal(trend[0].cumulative, 130);
+  assert.equal(trend[1].amount, 60);
+  assert.equal(trend[1].cumulative, 190);
+});
+
