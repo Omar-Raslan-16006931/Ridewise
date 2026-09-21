@@ -76,8 +76,30 @@ export default function Home() {
   // Analytics State
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>("week");
   const [weekOffset, setWeekOffset] = useState<number>(0);
-  const [weeklyBudget, setWeeklyBudget] = useState<number>(1500);
+  const [weeklyBudget, setWeeklyBudget] = useState<number>(700);
   const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
+
+  // Load saved budget from localStorage on initial render
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("ridewise_weekly_budget");
+      if (saved && !isNaN(Number(saved)) && Number(saved) > 0) {
+        setWeeklyBudget(Number(saved));
+      }
+    } catch {
+      // Ignore in SSR / private mode
+    }
+  }, []);
+
+  function handleSaveBudget(newBudget: number) {
+    setWeeklyBudget(newBudget);
+    try {
+      localStorage.setItem("ridewise_weekly_budget", String(newBudget));
+    } catch {
+      // Ignore
+    }
+    notify(`Weekly budget saved: ${money.format(newBudget)} (${money.format(newBudget / 4)}/college day).`, "success");
+  }
 
   // Accordion Expand/Collapse State for Progressive Disclosure
   const [accordionsOpen, setAccordionsOpen] = useState({
@@ -1021,22 +1043,26 @@ export default function Home() {
             <main className="tab-content" key="tab-split">
               <section className="split-summary-card">
                 <div className="section-header-row">
-                  <h3 className="section-header-title">Fair share balance</h3>
-                  <span className="section-header-meta">50% shared split</span>
+                  <h3 className="section-header-title">Settlement status</h3>
+                  <span className="section-header-meta">50/50 split</span>
                 </div>
 
-                <div className="split-members-grid">
-                  {members.map((member) => {
-                    const memberPaid = trips.filter((t) => t.paid_by === member.user_id).reduce((sum, t) => sum + t.amount, 0);
-                    const memberShare = trips.reduce((sum, t) => sum + getTripMemberSpend(t, member.user_id), 0);
-                    return (
-                      <div key={member.user_id} className="split-member-card">
-                        <span className="split-member-name">{member.display_name}</span>
-                        <span className="split-member-paid">{money.format(memberPaid)}</span>
-                        <span className="split-member-share">Paid upfront · share {money.format(memberShare)}</span>
-                      </div>
-                    );
-                  })}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "16px", background: "#f8f6f0", borderRadius: "var(--radius-md)", border: "1px solid #ece9df" }}>
+                  <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: '"DM Mono", monospace', fontWeight: 600 }}>
+                    Net Balance
+                  </span>
+                  <div style={{ fontSize: "24px", fontWeight: 700, letterSpacing: "-1px", color: "var(--ink)" }}>
+                    {stats.net === 0
+                      ? "All square"
+                      : stats.net > 0
+                      ? `${otherMember?.display_name ?? "Khaled"} owes you ${money.format(stats.net)}`
+                      : `You owe ${otherMember?.display_name ?? "Khaled"} ${money.format(Math.abs(stats.net))}`}
+                  </div>
+                  <span style={{ fontSize: "12px", color: "var(--muted)" }}>
+                    {stats.net === 0
+                      ? "No pending shared rides right now."
+                      : "Total balance across unsettled shared rides."}
+                  </span>
                 </div>
               </section>
 
@@ -1271,10 +1297,7 @@ export default function Home() {
           supabaseEnabled={Boolean(supabase)}
           notify={notify}
           weeklyBudget={weeklyBudget}
-          onSaveBudget={(b) => {
-            setWeeklyBudget(b);
-            notify(`Weekly budget set to ${money.format(b)} (${money.format(b / 4)}/college day).`, "success");
-          }}
+          onSaveBudget={handleSaveBudget}
           onAdd={saveTrip}
           onCreate={async (name, person) => {
             if (!supabase || !user) return;
@@ -1349,6 +1372,15 @@ function BottomSheetWindow({
   const [amount, setAmount] = useState<string>(editingTrip ? String(editingTrip.amount) : "");
   const [paidBy, setPaidBy] = useState<string>(editingTrip?.paid_by ?? user?.id ?? members[0]?.user_id ?? "omar");
   const [soloBy, setSoloBy] = useState<string>(editingTrip?.solo_by ?? user?.id ?? members[0]?.user_id ?? "omar");
+  const [closing, setClosing] = useState(false);
+
+  function handleClose() {
+    if (closing) return;
+    setClosing(true);
+    setTimeout(() => {
+      close();
+    }, 220);
+  }
 
   // Prevent background scroll and page jumps when bottom sheet is open
   useEffect(() => {
@@ -1359,9 +1391,15 @@ function BottomSheetWindow({
     };
   }, []);
 
+  async function handleSubmitRide(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    handleClose();
+    await onAdd(e);
+  }
+
   return (
-    <div className="bottom-sheet-backdrop" onClick={close}>
-      <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
+    <div className={`bottom-sheet-backdrop ${closing ? "closing" : ""}`} onClick={handleClose}>
+      <div className={`bottom-sheet ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
         <div className="bottom-sheet-handle" />
 
         <div className="bottom-sheet-header">
@@ -1374,14 +1412,14 @@ function BottomSheetWindow({
             {modal === "join-space" && "Join shared space"}
             {modal === "share" && "Invite co-pilot"}
           </h3>
-          <button type="button" className="bottom-sheet-close" onClick={close} aria-label="Close sheet">
+          <button type="button" className="bottom-sheet-close" onClick={handleClose} aria-label="Close sheet">
             ✕
           </button>
         </div>
 
         {/* ADD / EDIT RIDE SHEET (ULTRA FAST) */}
         {(modal === "add" || modal === "edit") && (
-          <form onSubmit={onAdd} className="sheet-form">
+          <form onSubmit={handleSubmitRide} className="sheet-form">
             {/* Big Tactile Amount Input */}
             <div className="hero-amount-box">
               <div className="hero-amount-wrap">
@@ -1499,42 +1537,42 @@ function BottomSheetWindow({
 
         {/* SET WEEKLY BUDGET */}
         {modal === "budget" && (
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              const form = new FormData(e.currentTarget);
-              const val = Number(form.get("budget"));
-              if (val > 0) {
-                onSaveBudget(val);
-                close();
-              }
-            }}
-            className="sheet-form"
-          >
-            <p style={{ fontSize: "13px", color: "var(--muted)", margin: "0 0 12px", lineHeight: 1.4 }}>
-              Divided strictly across <b>4 college days</b> (never 7) to track your daily transportation allowance accurately.
-            </p>
-            <div className="sheet-field">
-              <span className="segmented-label">Weekly Budget (EGP)</span>
-              <input name="budget" type="number" inputMode="numeric" min="100" step="50" required defaultValue={weeklyBudget} />
-            </div>
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
-              {[1000, 1200, 1500, 1800, 2000, 2400].map((preset) => (
-                <button
-                  key={preset}
-                  type="button"
-                  className="amount-preset-chip"
-                  onClick={(e) => {
-                    const input = e.currentTarget.form?.querySelector<HTMLInputElement>('input[name="budget"]');
-                    if (input) input.value = String(preset);
-                  }}
-                >
-                  {preset} EGP
-                </button>
-              ))}
-            </div>
-            <button type="submit" className="sheet-submit-btn">Save weekly budget</button>
-          </form>
+           <form
+             onSubmit={(e) => {
+               e.preventDefault();
+               const form = new FormData(e.currentTarget);
+               const val = Number(form.get("budget"));
+               if (val > 0) {
+                 onSaveBudget(val);
+                 handleClose();
+               }
+             }}
+             className="sheet-form"
+           >
+             <p style={{ fontSize: "13px", color: "var(--muted)", margin: "0 0 12px", lineHeight: 1.4 }}>
+               Divided strictly across <b>4 college days</b> (never 7) to track your daily transportation allowance accurately.
+             </p>
+             <div className="sheet-field">
+               <span className="segmented-label">Weekly Budget (EGP)</span>
+               <input name="budget" type="number" inputMode="numeric" min="100" step="50" required defaultValue={weeklyBudget} />
+             </div>
+             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
+               {[400, 500, 600, 700, 800, 1000].map((preset) => (
+                 <button
+                   key={preset}
+                   type="button"
+                   className="amount-preset-chip"
+                   onClick={(e) => {
+                     const input = e.currentTarget.form?.querySelector<HTMLInputElement>('input[name="budget"]');
+                     if (input) input.value = String(preset);
+                   }}
+                 >
+                   {preset} EGP
+                 </button>
+               ))}
+             </div>
+             <button type="submit" className="sheet-submit-btn">Save weekly budget</button>
+           </form>
         )}
 
         {/* SIGN IN */}
@@ -1543,7 +1581,14 @@ function BottomSheetWindow({
             <p style={{ fontSize: "13px", color: "var(--muted)", margin: 0, lineHeight: 1.4 }}>
               Sign in with your approved Google account to open your shared ride workspace with Khaled.
             </p>
-            <button type="button" className="sheet-submit-btn" onClick={() => void onSignIn()}>
+            <button
+              type="button"
+              className="sheet-submit-btn"
+              onClick={() => {
+                handleClose();
+                void onSignIn();
+              }}
+            >
               Continue with Google
             </button>
           </div>
@@ -1556,6 +1601,7 @@ function BottomSheetWindow({
             onSubmit={(e) => {
               e.preventDefault();
               const d = new FormData(e.currentTarget);
+              handleClose();
               void onCreate(String(d.get("space")), String(d.get("name")));
             }}
           >
@@ -1578,6 +1624,7 @@ function BottomSheetWindow({
             onSubmit={(e) => {
               e.preventDefault();
               const d = new FormData(e.currentTarget);
+              handleClose();
               void onJoin(String(d.get("code")), String(d.get("name")));
             }}
           >

@@ -25,15 +25,18 @@
 
 html {
   width: 100%;
+  max-width: 100%;
   margin: 0;
   padding: 0;
   background: #ebe8e0;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
+  overflow-x: hidden;
 }
 
 body {
   width: 100%;
+  max-width: 100%;
   margin: 0;
   padding: 0;
   color: var(--ink);
@@ -42,6 +45,7 @@ body {
   min-width: 320px;
   touch-action: manipulation;
   overflow-x: hidden;
+  position: relative;
 }
 
 button, input, select, textarea {
@@ -63,6 +67,7 @@ button {
   display: flex;
   flex-direction: column;
   position: relative;
+  overflow-x: hidden;
   box-shadow: 0 0 50px rgba(0, 0, 0, 0.06);
   padding-bottom: calc(84px + env(safe-area-inset-bottom, 16px));
 }
@@ -275,14 +280,9 @@ button {
 /* FILTER PILL BAR */
 .filter-bar {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
-  overflow-x: auto;
-  padding-bottom: 2px;
-  -webkit-overflow-scrolling: touch;
-  scrollbar-width: none;
-}
-.filter-bar::-webkit-scrollbar {
-  display: none;
+  width: 100%;
 }
 
 .filter-chip {
@@ -1281,8 +1281,9 @@ button {
    ======================================================== */
 .analytics-summary-trio {
   display: grid;
-  grid-template-columns: 1.2fr 1fr 1fr;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 8px;
+  width: 100%;
 }
 
 .trio-card {
@@ -1293,6 +1294,8 @@ button {
   display: flex;
   flex-direction: column;
   gap: 3px;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .trio-card.primary-trio {
@@ -1308,18 +1311,23 @@ button {
   letter-spacing: 0.06em;
   color: var(--muted);
   font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .trio-card.primary-trio .trio-label {
   color: #aeb4a8;
 }
 
 .trio-value {
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 700;
   letter-spacing: -0.6px;
   color: var(--ink);
   margin-top: auto;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .trio-card.primary-trio .trio-value {
   color: var(--lime);
@@ -1357,7 +1365,13 @@ button {
   justify-content: flex-end;
   overscroll-behavior: contain;
   touch-action: none;
-  animation: backdropFadeIn 0.2s ease forwards;
+  animation: backdropFadeIn 0.22s ease forwards;
+  transition: opacity 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.bottom-sheet-backdrop.closing {
+  opacity: 0;
+  pointer-events: none;
 }
 
 .bottom-sheet {
@@ -1374,6 +1388,12 @@ button {
   touch-action: pan-y;
   box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
   animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  transition: transform 0.22s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.bottom-sheet.closing {
+  animation: none;
+  transform: translateY(100%);
 }
 
 @keyframes sheetSlideUp {
