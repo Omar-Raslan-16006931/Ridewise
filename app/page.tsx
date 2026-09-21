@@ -633,15 +633,23 @@ export default function Home() {
 
       if (!credential) return notify("Passkey setup was cancelled.", "info");
 
-      let sessionData: { access_token: string; refresh_token: string } | undefined;
-      if (supabase) {
-        const { data } = await supabase.auth.getSession();
-        if (data.session) {
-          sessionData = {
-            access_token: data.session.access_token,
-            refresh_token: data.session.refresh_token,
-          };
-        }
+      const secretToken = crypto.randomUUID();
+
+      // Register passkey metadata on backend
+      try {
+        await fetch("/api/auth/passkey", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "register",
+            userId: user.id,
+            email: user.email,
+            credentialId: credential.id,
+            secretToken,
+          }),
+        });
+      } catch {
+        // Continue saving locally
       }
 
       const record = {
@@ -649,8 +657,8 @@ export default function Home() {
         userId: user.id,
         userEmail: user.email ?? "",
         userName: currentName,
+        secretToken,
         createdAt: new Date().toISOString(),
-        session: sessionData,
       };
 
       try {
@@ -683,22 +691,6 @@ export default function Home() {
       });
 
       if (assertion) {
-        if (supabase) {
-          const { data } = await supabase.auth.getSession();
-          if (data.session) {
-            try {
-              const raw = localStorage.getItem("ridewise_passkey_v1");
-              if (raw) {
-                const parsed = JSON.parse(raw);
-                parsed.session = {
-                  access_token: data.session.access_token,
-                  refresh_token: data.session.refresh_token,
-                };
-                localStorage.setItem("ridewise_passkey_v1", JSON.stringify(parsed));
-              }
-            } catch {}
-          }
-        }
         notify("Face ID verified successfully! ✓", "success");
       }
     } catch (error: any) {
@@ -720,6 +712,10 @@ export default function Home() {
   async function signInWithPasskey() {
     if (!window.PublicKeyCredential) return notify("Passkeys/Face ID are not supported in this browser.", "error");
     try {
+      const raw = localStorage.getItem("ridewise_passkey_v1");
+      if (!raw) return notify("No Face ID profile saved on this device. Please sign in and set up Face ID in Settings.", "error");
+      const record = JSON.parse(raw);
+
       const challenge = new Uint8Array(32);
       window.crypto.getRandomValues(challenge);
       const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
@@ -735,26 +731,37 @@ export default function Home() {
 
       if (!assertion) return;
 
-      const raw = localStorage.getItem("ridewise_passkey_v1");
-      if (!raw) return notify("No passkey saved on this device.", "error");
-      const record = JSON.parse(raw);
+      notify("Face ID verified! Signing in...", "info");
 
-      if (supabase && record.session?.refresh_token) {
-        const { data, error } = await supabase.auth.setSession({
-          access_token: record.session.access_token,
-          refresh_token: record.session.refresh_token,
+      const res = await fetch("/api/auth/passkey", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "login",
+          email: record.userEmail,
+          credentialId: record.credentialId,
+          secretToken: record.secretToken,
+        }),
+      });
+
+      const result = await res.json();
+      if (!res.ok || result.error || !result.token_hash) {
+        throw new Error(result.error || "Failed to authenticate passkey.");
+      }
+
+      if (supabase) {
+        const { data, error } = await supabase.auth.verifyOtp({
+          token_hash: result.token_hash,
+          type: "magiclink",
         });
+
         if (error || !data.user) {
-          notify("Session expired. Please sign in with Google once to re-sync Face ID.", "info");
-          setModal("sign-in");
-          return;
+          throw new Error(error?.message || "Session verification failed.");
         }
+
         setModal(null);
         await handleAuthSession({ id: data.user.id, email: data.user.email });
-        notify(`Welcome back, ${record.userName || "rider"}! Face ID verified.`, "success");
-      } else {
-        notify("Face ID verified! Please sign in with Google to sync cloud workspace.", "info");
-        setModal("sign-in");
+        notify(`Welcome back, ${record.userName || "rider"}! Signed in with Face ID.`, "success");
       }
     } catch (error: any) {
       const errorName = error instanceof DOMException ? error.name : error?.name;
@@ -937,25 +944,6 @@ export default function Home() {
                       )}
                     </div>
                   </div>
-                  <span
-                    className={`budget-badge ${
-                      analytics.todayMetrics.todayRemaining < 0
-                        ? "over"
-                        : analytics.todayMetrics.todayRemaining === 0
-                        ? "on"
-                        : analytics.todayMetrics.todayActualSpend === 0
-                        ? "on"
-                        : "under"
-                    }`}
-                  >
-                    {analytics.todayMetrics.todayRemaining < 0
-                      ? "Over limit"
-                      : analytics.todayMetrics.todayRemaining === 0
-                      ? "Budget met"
-                      : analytics.todayMetrics.todayActualSpend === 0
-                      ? "Untouched"
-                      : "On track"}
-                  </span>
                 </div>
 
                 {/* Progress Bar */}

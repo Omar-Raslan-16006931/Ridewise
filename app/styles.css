@@ -298,31 +298,36 @@ button {
 
 .today-budget-header {
   display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 10px;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .today-budget-title-wrap {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
+  width: 100%;
 }
 
 .today-budget-eyebrow {
   font-family: "DM Mono", monospace;
-  font-size: 10.5px;
-  letter-spacing: 0.08em;
+  font-size: 11px;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
   font-weight: 600;
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .today-budget-title {
   display: flex;
+  flex-direction: row;
   align-items: baseline;
   gap: 8px;
   margin: 0;
+  white-space: nowrap;
+  flex-wrap: nowrap;
 }
 
 .today-budget-amount {
@@ -331,6 +336,8 @@ button {
   letter-spacing: -0.8px;
   color: var(--ink);
   line-height: 1;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .today-budget-amount.over {
@@ -338,9 +345,11 @@ button {
 }
 
 .today-budget-sub {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--muted);
+  white-space: nowrap;
+  line-height: 1;
 }
 
 .today-budget-sub.over {
