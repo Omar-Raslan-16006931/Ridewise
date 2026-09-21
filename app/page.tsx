@@ -2094,69 +2094,57 @@ function BottomSheetWindow({
 
         {/* IOS SHORTCUT SETUP */}
         {modal === "shortcut" && (
-          <div className="sheet-form" style={{ gap: "16px" }}>
-            {/* Quick Actions at Top */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "8px" }}>
-              <a
-                href="shortcuts://"
-                className="sheet-submit-btn"
-                style={{ textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "12px", padding: "10px" }}
-              >
-                <span>Open Shortcuts</span>
-                <span>↗</span>
-              </a>
-              <button
-                type="button"
-                className="copy-code-btn"
-                style={{ padding: "10px", fontSize: "12px", fontWeight: 600 }}
-                onClick={() => {
-                  const origin = typeof window !== "undefined" ? window.location.origin : "https://ridewise.vercel.app";
-                  const template = {
-                    name: "Log Ridewise Commute",
-                    description: "iOS Shortcut to log rides into your shared ledger",
-                    endpoint: `${origin}/api/trips`,
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    fields: [
-                      { key: "group_code", type: "Text", value: group?.invite_code || "RIDE2026", note: "Your group's secret code" },
-                      { key: "amount", type: "Number", value: "[Shortcut Input]", note: "From Ask for Number action" },
-                      { key: "trip_mode", type: "Text", value: "[Menu Result]", note: "'shared' or 'solo'" },
-                      { key: "paid_by", type: "Text", value: "[Menu Result]", note: members.map((m) => m.display_name).join(" or ") || "Omar or Khaled" },
-                    ],
-                    steps: [
-                      "1. Ask for [Number] with prompt 'Enter ride fare in EGP:'",
-                      "2. Choose from Menu with prompt 'Ride Type:':\n   - shared\n   - solo",
-                      `3. Choose from Menu with prompt 'Who Paid:':\n   - ${members.map((m) => m.display_name).join("\n   - ") || "Omar\n   - Khaled"}`,
-                      `4. Get Contents of URL (POST to ${origin}/api/trips) with the 4 JSON fields above`,
-                      "5. Show Notification: 'Ride logged successfully!'",
-                    ],
-                  };
-                  const blob = new Blob([JSON.stringify(template, null, 2)], { type: "application/json" });
-                  const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a");
-                  a.href = url;
-                  a.download = "ridewise-shortcut-template.json";
-                  a.click();
-                  URL.revokeObjectURL(url);
-                  notify("Shortcut template downloaded!", "success");
-                }}
-              >
-                📥 Download Template
-              </button>
+          <div className="sheet-form" style={{ gap: "14px" }}>
+            <a
+              href="shortcuts://"
+              className="sheet-submit-btn"
+              style={{ textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px", padding: "12px" }}
+            >
+              <span>Open Apple Shortcuts App</span>
+              <span>↗</span>
+            </a>
+
+            {/* Webhook Endpoint Box */}
+            <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "12px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "8px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
+                <span style={{ color: "var(--muted)", fontWeight: 500 }}>Action:</span>
+                <span style={{ fontWeight: 600 }}>Get Contents of URL</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
+                <span style={{ color: "var(--muted)", fontWeight: 500 }}>Method:</span>
+                <strong style={{ color: "var(--accent)" }}>POST</strong>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                <span style={{ fontFamily: "monospace", fontSize: "11px", wordBreak: "break-all" }}>
+                  {typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips"}
+                </span>
+                <button
+                  type="button"
+                  className="copy-code-btn"
+                  style={{ padding: "3px 8px", fontSize: "10px", marginLeft: "8px" }}
+                  onClick={() => {
+                    const url = typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips";
+                    void navigator.clipboard.writeText(url);
+                    notify("Copied API URL!", "info");
+                  }}
+                >
+                  Copy URL
+                </button>
+              </div>
             </div>
 
-            {/* Apple Shortcuts JSON Keys with 1-Tap Copy */}
-            <div style={{ background: "var(--surface-container)", borderRadius: "16px", padding: "14px", border: "1px solid var(--border)" }}>
+            {/* Apple Shortcuts Fields & Types */}
+            <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "14px", border: "1px solid var(--border)" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
                 <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>
-                  Shortcut JSON Fields & Types
+                  Request Body Fields & Types
                 </span>
                 <span style={{ fontSize: "10px", color: "var(--accent)", fontWeight: 600 }}>
                   Tap key to copy
                 </span>
               </div>
               <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-                In Apple Shortcuts &gt; "Get contents of URL" &gt; Request Body (JSON), add these 4 fields:
+                In "Get contents of URL", set Request Body to <strong>JSON</strong> and add these 4 fields:
               </p>
 
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
@@ -2214,7 +2202,7 @@ function BottomSheetWindow({
                     </button>
                   </div>
                   <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
-                    Value: Select <strong>Shortcut Input</strong> (from "Ask for Number" action)
+                    Value: Select <strong>Shortcut Input</strong> (from "Ask for Number")
                   </div>
                 </div>
 
@@ -2266,99 +2254,6 @@ function BottomSheetWindow({
                   </div>
                 </div>
               </div>
-
-              {/* Copy Full JSON */}
-              <button
-                type="button"
-                className="copy-code-btn"
-                style={{ width: "100%", marginTop: "10px" }}
-                onClick={() => {
-                  const samplePayload = {
-                    group_code: group?.invite_code || "RIDE2026",
-                    amount: 120,
-                    trip_mode: "shared",
-                    paid_by: members[0]?.display_name || "Omar",
-                  };
-                  void navigator.clipboard.writeText(JSON.stringify(samplePayload, null, 2));
-                  notify("Full sample JSON copied to clipboard!", "success");
-                }}
-              >
-                📋 Copy Full Sample JSON
-              </button>
-            </div>
-
-            {/* Supabase Permissions / Invalid Code Fix */}
-            <div style={{ background: "rgba(234, 179, 8, 0.08)", border: "1px solid rgba(234, 179, 8, 0.25)", borderRadius: "16px", padding: "14px" }}>
-              <div style={{ fontWeight: 700, fontSize: "12px", marginBottom: "4px", color: "var(--foreground)", display: "flex", alignItems: "center", gap: "6px" }}>
-                <span>⚠️</span> Why did it say "Invalid group code"?
-              </div>
-              <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-                Supabase database security (RLS) blocks external API access by default. You can enable it in 30 seconds:
-              </p>
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px", fontSize: "11px", color: "var(--muted)" }}>
-                <div>
-                  <strong>Option A (Recommended):</strong> Add <code style={{ color: "var(--foreground)" }}>SUPABASE_SERVICE_ROLE_KEY</code> to your Vercel Environment Variables (from Supabase Dashboard &gt; Project Settings &gt; API &gt; service_role secret).
-                </div>
-                <div>
-                  <strong>Option B (Instant SQL):</strong> Run our shortcut helper function in your Supabase SQL Editor.
-                </div>
-              </div>
-              <button
-                type="button"
-                className="copy-code-btn"
-                style={{ width: "100%", marginTop: "10px" }}
-                onClick={() => {
-                  const sql = `-- Run this in Supabase SQL Editor to enable iOS Shortcut logging:
-create or replace function public.log_shortcut_trip(p_group_code text, p_amount numeric, p_trip_mode text default 'shared', p_payer text default null, p_notes text default null, p_direction text default null)
-returns jsonb language plpgsql security definer set search_path = public as $$
-declare target_group public.ride_groups; target_payer public.ride_group_members; final_direction text; final_mode text; new_trip public.ride_trips;
-begin
-  select * into target_group from public.ride_groups where upper(trim(invite_code)) = upper(trim(p_group_code));
-  if target_group.id is null then return jsonb_build_object('success', false, 'error', 'Invalid group code'); end if;
-  if p_amount is null or p_amount <= 0 or p_amount >= 100000 then return jsonb_build_object('success', false, 'error', 'Invalid amount'); end if;
-  final_mode := lower(trim(coalesce(p_trip_mode, 'shared')));
-  if final_mode not in ('shared', 'solo') then final_mode := 'shared'; end if;
-  if p_payer is not null and trim(p_payer) <> '' then select * into target_payer from public.ride_group_members where group_id = target_group.id and (user_id::text = trim(p_payer) or lower(display_name) = lower(trim(p_payer))) limit 1; end if;
-  if target_payer.user_id is null then select * into target_payer from public.ride_group_members where group_id = target_group.id order by joined_at asc limit 1; end if;
-  final_direction := lower(trim(coalesce(p_direction, '')));
-  if final_direction not in ('campus', 'home') then final_direction := case when extract(hour from now() at time zone 'Africa/Cairo') < 13 then 'campus' else 'home' end; end if;
-  insert into public.ride_trips (group_id, ride_at, direction, amount, trip_mode, solo_by, paid_by, created_by, notes)
-  values (target_group.id, now(), final_direction, p_amount, final_mode, case when final_mode = 'solo' then target_payer.user_id else null end, target_payer.user_id, target_payer.user_id, coalesce(p_notes, 'Logged via iOS Shortcut'))
-  returning * into new_trip;
-  return jsonb_build_object('success', true, 'trip', jsonb_build_object('id', new_trip.id, 'amount', new_trip.amount, 'trip_mode', new_trip.trip_mode, 'paid_by', target_payer.display_name));
-end;
-$$;
-revoke all on function public.log_shortcut_trip(text, numeric, text, text, text, text) from public;
-grant execute on function public.log_shortcut_trip(text, numeric, text, text, text, text) to anon, authenticated;`;
-                  void navigator.clipboard.writeText(sql);
-                  notify("SQL helper copied! Paste into Supabase SQL Editor and click Run.", "success");
-                }}
-              >
-                📋 Copy Supabase SQL Helper Function
-              </button>
-            </div>
-
-            {/* Quick Web Link Shortcut (Zero Config alternative) */}
-            <div style={{ background: "var(--surface-container)", borderRadius: "16px", padding: "14px", border: "1px solid var(--border)" }}>
-              <div style={{ fontSize: "12px", fontWeight: 700, marginBottom: "4px", color: "var(--foreground)" }}>
-                Zero-Config Alternative: 1-Tap URL Launcher
-              </div>
-              <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-                If you don't want to configure webhooks, use "Open URLs" in Shortcuts to launch Ridewise with pre-filled inputs:
-              </p>
-              <button
-                type="button"
-                className="copy-code-btn"
-                style={{ width: "100%" }}
-                onClick={() => {
-                  const origin = typeof window !== "undefined" ? window.location.origin : "https://ridewise.vercel.app";
-                  const sampleUrl = `${origin}/?shortcut=1&amount=120&mode=shared&paid_by=${encodeURIComponent(members[0]?.display_name || "Omar")}`;
-                  void navigator.clipboard.writeText(sampleUrl);
-                  notify("Launcher URL copied to clipboard!", "success");
-                }}
-              >
-                📋 Copy Shortcut Launcher URL
-              </button>
             </div>
           </div>
         )}
