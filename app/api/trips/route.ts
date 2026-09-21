@@ -64,14 +64,72 @@ export async function POST(request: Request) {
   }
 
   const hasApiKey = hasValidApiKey(request);
-  const groupCode = String(body.group_code ?? request.headers.get("x-ridewise-group-code") ?? "").trim().toUpperCase();
+  const groupCode = String(
+    body.group_code ??
+      body.groupCode ??
+      body.code ??
+      body.invite_code ??
+      request.headers.get("x-ridewise-group-code") ??
+      ""
+  )
+    .trim()
+    .toUpperCase();
 
   if (!hasApiKey && !groupCode) {
     return unauthorized();
   }
 
-  const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { autoRefreshToken: false, persistSession: false } });
+  const supabase = createClient(supabaseUrl, serviceRoleKey, {
+    auth: { autoRefreshToken: false, persistSession: false },
+  });
 
+  const rawAmount = body.amount ?? body.fare ?? body.cost;
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount) || amount <= 0 || amount >= 100000) {
+    return NextResponse.json({ error: "amount must be a positive number under 100,000" }, { status: 400 });
+  }
+
+  // Direction: campus or home (default by Cairo time of day)
+  let direction = String(body.direction ?? "").toLowerCase().trim();
+  if (!directions.has(direction)) {
+    direction = new Date().getHours() < 13 ? "campus" : "home";
+  }
+
+  // Mode: shared or solo
+  const tripMode = String(body.trip_mode ?? body.mode ?? body.type ?? "shared").toLowerCase().trim();
+  if (!tripModes.has(tripMode)) {
+    return NextResponse.json({ error: "trip_mode must be 'shared' or 'solo'" }, { status: 400 });
+  }
+
+  // Resolve raw payer name / UUID
+  const rawPayer = String(
+    body.paid_by ?? body.paidBy ?? body.payer ?? body.who_paid ?? body.who ?? body.rider ?? ""
+  ).trim();
+
+  // ATTEMPT 1: Try database RPC function (bypasses RLS without service role key if installed)
+  if (groupCode) {
+    try {
+      const { data: rpcData, error: rpcError } = await supabase.rpc("log_shortcut_trip", {
+        p_group_code: groupCode,
+        p_amount: amount,
+        p_trip_mode: tripMode,
+        p_payer: rawPayer || null,
+        p_notes: body.notes ? String(body.notes).trim().slice(0, 280) : "Logged via iOS Shortcut",
+        p_direction: direction,
+      });
+
+      if (!rpcError && rpcData) {
+        if (rpcData.error || rpcData.success === false) {
+          return NextResponse.json({ error: rpcData.error }, { status: 400 });
+        }
+        return NextResponse.json({ success: true, trip: rpcData.trip }, { status: 201 });
+      }
+    } catch {
+      // If RPC is not present, fall through to direct tables
+    }
+  }
+
+  // ATTEMPT 2: Direct tables query (requires SUPABASE_SERVICE_ROLE_KEY or appropriate RLS permissions)
   let groupId = String(body.group_id ?? process.env.RIDEWISE_SHORTCUT_GROUP_ID ?? "");
   if (!groupId && groupCode) {
     const { data: groupData, error: groupErr } = await supabase
@@ -80,8 +138,26 @@ export async function POST(request: Request) {
       .eq("invite_code", groupCode)
       .maybeSingle();
 
-    if (groupErr || !groupData) {
-      return NextResponse.json({ error: "Invalid group code" }, { status: 401 });
+    if (groupErr) {
+      if (groupErr.code === "42501" || groupErr.message?.includes("permission denied")) {
+        return NextResponse.json(
+          {
+            error:
+              "Database permission denied (RLS). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel Environment Variables, or run the SQL function from the shortcut modal in Supabase SQL editor.",
+          },
+          { status: 500 }
+        );
+      }
+      return NextResponse.json({ error: groupErr.message }, { status: 500 });
+    }
+
+    if (!groupData) {
+      return NextResponse.json(
+        {
+          error: `Group code '${groupCode}' was not found. Please verify your invite code in the Space tab.`,
+        },
+        { status: 404 }
+      );
     }
     groupId = groupData.id;
   }
@@ -96,29 +172,23 @@ export async function POST(request: Request) {
     .select("user_id,display_name")
     .eq("group_id", groupId);
 
-  if (membersError || !members || members.length === 0) {
+  if (membersError) {
+    if (membersError.code === "42501" || membersError.message?.includes("permission denied")) {
+      return NextResponse.json(
+        {
+          error:
+            "Database permission denied (RLS). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel Environment Variables.",
+        },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ error: membersError.message }, { status: 500 });
+  }
+
+  if (!members || members.length === 0) {
     return NextResponse.json({ error: "Group members not found" }, { status: 404 });
   }
 
-  const amount = Number(body.amount);
-  if (!Number.isFinite(amount) || amount <= 0 || amount >= 100000) {
-    return NextResponse.json({ error: "amount must be a positive number" }, { status: 400 });
-  }
-
-  // Direction: campus or home (default by time of day)
-  let direction = String(body.direction ?? "").toLowerCase().trim();
-  if (!directions.has(direction)) {
-    direction = new Date().getHours() < 13 ? "campus" : "home";
-  }
-
-  // Mode: shared or solo
-  const tripMode = String(body.trip_mode ?? body.mode ?? "shared").toLowerCase().trim();
-  if (!tripModes.has(tripMode)) {
-    return NextResponse.json({ error: "mode must be shared or solo" }, { status: 400 });
-  }
-
-  // Resolve payer by ID or display name
-  const rawPayer = String(body.paid_by ?? body.rider ?? "").trim();
   let matchedMember = members.find(
     (m) => m.user_id === rawPayer || m.display_name.toLowerCase() === rawPayer.toLowerCase()
   );
@@ -137,18 +207,34 @@ export async function POST(request: Request) {
   const notes = body.notes ? String(body.notes).trim().slice(0, 280) : "Logged via iOS Shortcut";
   const rideAt = body.ride_at ? new Date(String(body.ride_at)) : new Date();
 
-  const { data: trip, error } = await supabase.from("ride_trips").insert({
-    group_id: groupId,
-    ride_at: rideAt.toISOString(),
-    direction,
-    amount,
-    trip_mode: tripMode,
-    solo_by: riderId,
-    paid_by: payerId,
-    created_by: createdBy,
-    notes,
-  }).select("id,group_id,ride_at,direction,amount,trip_mode,solo_by,paid_by,created_by,notes").single();
+  const { data: trip, error } = await supabase
+    .from("ride_trips")
+    .insert({
+      group_id: groupId,
+      ride_at: rideAt.toISOString(),
+      direction,
+      amount,
+      trip_mode: tripMode,
+      solo_by: riderId,
+      paid_by: payerId,
+      created_by: createdBy,
+      notes,
+    })
+    .select("id,group_id,ride_at,direction,amount,trip_mode,solo_by,paid_by,created_by,notes")
+    .single();
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 });
+  if (error) {
+    if (error.code === "42501" || error.message?.includes("permission denied")) {
+      return NextResponse.json(
+        {
+          error:
+            "Database permission denied (RLS). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel Environment Variables.",
+        },
+        { status: 500 }
+      );
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
   return NextResponse.json({ success: true, trip }, { status: 201 });
 }
