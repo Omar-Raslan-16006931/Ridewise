@@ -359,7 +359,29 @@ export default function Home() {
 
           <section className="ledger-section">
             <div className="section-heading"><div><div className="eyebrow">Shared rides</div><h2>Split between both riders.</h2></div><button className="text-button" onClick={() => requestAction("add")}>New trip</button></div>
-            <div className="ledger-summary"><div><span>Shared ride total</span><strong>{money.format(sharedTotal)}</strong></div><div><span>Rides</span><strong>{sharedTrips.length}</strong></div><small>Each shared ride is counted as half for Omar and half for Khaled.</small></div>
+            <div className="section-analytics-grid shared-analytics-grid">
+              <article className="stat-card total-card">
+                <span>Shared total</span>
+                <strong>{money.format(sharedTotal)}</strong>
+                <small>{sharedTrips.length} {sharedTrips.length === 1 ? "ride" : "rides"} logged</small>
+              </article>
+              <article className="stat-card">
+                <span>Each rider share</span>
+                <strong>{money.format(sharedTotal / 2)}</strong>
+                <small>50% split per person</small>
+              </article>
+              {members.map((member) => {
+                const memberPaidTrips = sharedTrips.filter((t) => t.paid_by === member.user_id);
+                const memberPaidTotal = memberPaidTrips.reduce((sum, t) => sum + t.amount, 0);
+                return (
+                  <article className="stat-card member-card" key={`shared-paid-${member.user_id}`}>
+                    <span>{member.display_name} paid</span>
+                    <strong>{money.format(memberPaidTotal)}</strong>
+                    <small>{memberPaidTrips.length} {memberPaidTrips.length === 1 ? "ride" : "rides"} upfront</small>
+                  </article>
+                );
+              })}
+            </div>
             <div className="ledger">
               {sharedTrips.length === 0 ? <div className="ledger-empty">No shared rides logged yet.</div> : sharedTrips.map((trip) => <TripRow key={trip.id} trip={trip} members={members} currentUserId={currentUserId} onEdit={() => { setEditingTrip(trip); setModal("edit"); }} onSettle={(memberId) => void settleTrip(trip, memberId)} onDelete={() => void deleteTrip(trip)} />)}
             </div>
@@ -367,7 +389,20 @@ export default function Home() {
 
           <section className="ledger-section solo-section">
             <div className="section-heading"><div><div className="eyebrow">Solo rides</div><h2>Full cost, one rider.</h2></div><button className="text-button" onClick={() => requestAction("add")}>New solo ride</button></div>
-            <div className="solo-total-grid">{soloTotals.map((member) => <article className="solo-total" key={member.user_id}><span>{member.display_name} alone</span><strong>{money.format(member.total)}</strong><small>{member.rides.length} {member.rides.length === 1 ? "ride" : "rides"} paid in full</small></article>)}</div>
+            <div className="section-analytics-grid solo-analytics-grid">
+              <article className="stat-card total-card">
+                <span>Solo rides total</span>
+                <strong>{money.format(soloTrips.reduce((sum, t) => sum + t.amount, 0))}</strong>
+                <small>{soloTrips.length} {soloTrips.length === 1 ? "ride" : "rides"} paid in full</small>
+              </article>
+              {soloTotals.map((member) => (
+                <article className="stat-card member-card" key={`solo-stat-${member.user_id}`}>
+                  <span>{member.display_name} alone</span>
+                  <strong>{money.format(member.total)}</strong>
+                  <small>{member.rides.length} {member.rides.length === 1 ? "ride" : "rides"} · 100% personal</small>
+                </article>
+              ))}
+            </div>
             <div className="ledger">
               {soloTrips.length === 0 ? <div className="ledger-empty">No solo rides logged yet.</div> : soloTrips.map((trip) => <TripRow key={trip.id} trip={trip} members={members} currentUserId={currentUserId} onEdit={() => { setEditingTrip(trip); setModal("edit"); }} onSettle={(memberId) => void settleTrip(trip, memberId)} onDelete={() => void deleteTrip(trip)} />)}
             </div>
