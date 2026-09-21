@@ -339,12 +339,6 @@ export default function Home() {
             </div>
           </section>
 
-          <section className="stat-grid" aria-label="Ride statistics">
-            <article className="stat-card total-card"><span>All trips</span><strong>{trips.length}</strong><small>shared and solo rides</small></article>
-            <article className="stat-card"><span>Total cost</span><strong>{money.format(stats.total)}</strong><small>all logged rides</small></article>
-            {stats.totalByMember.map((member) => <article className="stat-card" key={`share-${member.user_id}`}><span>{member.display_name} total</span><strong>{money.format(member.spend)}</strong><small>half of shared + solo rides</small></article>)}
-          </section>
-
           <section className="analytics-section" aria-label="Ride analytics">
             <div className="analytics-heading"><div><div className="eyebrow">Ride analytics</div><h2>Your rides, in context.</h2></div><div className="period-tabs" aria-label="Analytics period"><button className={analyticsPeriod === "lifetime" ? "active" : ""} onClick={() => setAnalyticsPeriod("lifetime")}>All time</button><button className={analyticsPeriod === "week" ? "active" : ""} onClick={() => setAnalyticsPeriod("week")}>7 days</button><button className={analyticsPeriod === "month" ? "active" : ""} onClick={() => setAnalyticsPeriod("month")}>Month</button></div></div>
             <p className="analytics-caption">{analytics.label} · every logged Uber, including settled rides.</p>
