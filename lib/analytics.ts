@@ -551,3 +551,72 @@ export function computeSpendingTrend(trips: Trip[], memberId?: string): TrendDat
 
   return points;
 }
+
+export type DailySpendPoint = {
+  date: string;
+  label: string;
+  dayName: string;
+  amount: number;
+  ridesCount: number;
+};
+
+/**
+ * Computes non-cumulative discrete daily spending data points across trips sorted chronologically.
+ * If memberId is provided, calculates personal share for each day.
+ */
+export function computeDailySpendingSeries(trips: Trip[], memberId?: string): DailySpendPoint[] {
+  if (!trips || trips.length === 0) return [];
+
+  const sorted = [...trips].sort((a, b) => new Date(a.ride_at).getTime() - new Date(b.ride_at).getTime());
+  const byDate = new Map<string, { label: string; dayName: string; amount: number; count: number }>();
+
+  for (const t of sorted) {
+    const key = toLocalDateKey(t.ride_at);
+    if (!key) continue;
+    const spend = memberId ? memberTripSpend(t, memberId) : (Number(t.amount) || 0);
+    const [y, m, d] = key.split("-").map(Number);
+    const localDate = new Date(y, m - 1, d);
+    const label = localDate.toLocaleDateString("en", { month: "short", day: "numeric" });
+    const dayName = localDate.toLocaleDateString("en", { weekday: "short" });
+    const existing = byDate.get(key);
+    if (existing) {
+      existing.amount += spend;
+      existing.count += 1;
+    } else {
+      byDate.set(key, { label, dayName, amount: spend, count: 1 });
+    }
+  }
+
+  const series: DailySpendPoint[] = [];
+  for (const [date, val] of byDate.entries()) {
+    series.push({
+      date,
+      label: val.label,
+      dayName: val.dayName,
+      amount: val.amount,
+      ridesCount: val.count,
+    });
+  }
+
+  return series;
+}
+
+/**
+ * Calculates estimated average monthly commute spending for a specific member only.
+ * Based on personal trips (half of shared + own solo).
+ */
+export function personalAverageMonthlySpend(trips: Trip[], memberId: string): number {
+  if (!trips || trips.length === 0 || !memberId) return 0;
+  const personalTrips = trips.filter((t) => t.trip_mode === "shared" || t.solo_by === memberId);
+  if (personalTrips.length === 0) return 0;
+
+  const totalSpend = personalTrips.reduce((sum, t) => sum + memberTripSpend(t, memberId), 0);
+  const timestamps = personalTrips.map((t) => new Date(t.ride_at).getTime());
+  const earliest = Math.min(...timestamps);
+  const latest = Math.max(...timestamps, Date.now());
+  const diffDays = Math.max(1, (latest - earliest) / (1000 * 60 * 60 * 24));
+  const months = Math.max(1, diffDays / 30.44);
+
+  return totalSpend / months;
+}
+

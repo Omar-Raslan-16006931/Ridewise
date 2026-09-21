@@ -29,8 +29,11 @@ import {
   toLocalDateKey,
   filterSoloTrips,
   computeSpendingTrend,
+  computeDailySpendingSeries,
+  personalAverageMonthlySpend,
   type SoloScope,
   type TrendDataPoint,
+  type DailySpendPoint,
 } from "../lib/analytics";
 
 const demoGroup: RideGroup = { id: "demo-group", name: "Omar + Khaled", invite_code: "RIDE2026" };
@@ -84,7 +87,7 @@ export default function Home() {
   const [weeklyBudget, setWeeklyBudget] = useState<number>(700);
   const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
   const [soloScope, setSoloScope] = useState<SoloScope>("mine");
-  const [activeTrendDot, setActiveTrendDot] = useState<TrendDataPoint | null>(null);
+  const [activeDailyBar, setActiveDailyBar] = useState<DailySpendPoint | null>(null);
 
   // Load saved budget from localStorage on initial render
   useEffect(() => {
@@ -191,6 +194,10 @@ export default function Home() {
     const toCampus = trips.filter((trip) => trip.direction === "campus").length;
     const toHome = trips.length - toCampus;
     const paidByYou = trips.filter((trip) => trip.paid_by === currentUserId).reduce((sum, trip) => sum + trip.amount, 0);
+    const paidByOther = trips.filter((trip) => trip.paid_by !== currentUserId).reduce((sum, trip) => sum + trip.amount, 0);
+    const otherMember = getOtherMember(members, currentUserId);
+    const personalSpendByYou = trips.reduce((sum, trip) => sum + memberTripSpend(trip, currentUserId), 0);
+    const personalSpendByOther = trips.reduce((sum, trip) => sum + (otherMember ? memberTripSpend(trip, otherMember.user_id) : 0), 0);
     const paidByMember = members.map((member) => ({
       ...member,
       total: trips.filter((trip) => trip.paid_by === member.user_id).reduce((sum, trip) => sum + trip.amount, 0),
@@ -200,7 +207,7 @@ export default function Home() {
       display_name: member.display_name,
       spend: trips.reduce((sum, trip) => sum + getTripMemberSpend(trip, member.user_id), 0),
     }));
-    return { owedToYou, youOwe, net: owedToYou - youOwe, total, toCampus, toHome, paidByYou, paidByMember, totalByMember };
+    return { owedToYou, youOwe, net: owedToYou - youOwe, total, toCampus, toHome, paidByYou, paidByOther, personalSpendByYou, personalSpendByOther, otherMember, paidByMember, totalByMember };
   }, [trips, members, currentUserId]);
 
   const recentTrips = useMemo(() => {
@@ -305,7 +312,14 @@ export default function Home() {
     const sharingSavingsVal = sharedRideSavings(horizonTrips);
     const allTimeSharingSavings = sharedRideSavings(trips);
 
-    // Cumulative Spending Trend (for the interactive SVG chart)
+    // Discrete non-cumulative daily spending series & personal monthly commute average
+    const dailySpendingSeries = computeDailySpendingSeries(horizonTrips, currentUserId);
+    const personalMonthlyAvg = personalAverageMonthlySpend(trips, currentUserId);
+    const dailySpendingAvg = dailySpendingSeries.length > 0
+      ? dailySpendingSeries.reduce((s, d) => s + d.amount, 0) / dailySpendingSeries.length
+      : 0;
+
+    // Cumulative Spending Trend (fallback / backwards compatibility)
     const spendingTrend = computeSpendingTrend(horizonTrips, currentUserId);
 
     // Commuter Route Breakdown (Morning Campus vs Evening Home)
@@ -381,6 +395,9 @@ export default function Home() {
       sharedBusUsedPct,
       factualInsights,
       spendingTrend,
+      dailySpendingSeries,
+      personalMonthlyAvg,
+      dailySpendingAvg,
       campusTrips,
       homeTrips,
       campusSpend,
@@ -850,51 +867,129 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Saturday -> Friday Day-by-Day Pulse Bar Chart */}
+              {/* Saturday -> Friday Redesigned High-Fidelity Daily Spending Pulse */}
               <section className="daily-pulse-card">
                 <div className="daily-pulse-header">
-                  <h4 className="daily-pulse-title">Daily spending pulse</h4>
-                  <span style={{ fontSize: "11px", color: "var(--muted)" }}>Sat → Fri</span>
+                  <div>
+                    <h4 className="daily-pulse-title">Daily Spending Pulse</h4>
+                    <span style={{ fontSize: "11px", color: "var(--muted)" }}>Interactive week pacing · Sat → Fri</span>
+                  </div>
+                  <span style={{ fontSize: "11px", fontFamily: "DM Mono, monospace", color: "var(--green)", fontWeight: 700 }}>
+                    {money.format(analytics.expectedDailyBudget)}/day target
+                  </span>
                 </div>
-                <div className="daily-pulse-grid">
+
+                <div className="pulse-strip-grid">
                   {analytics.spendingDays.map((day) => {
                     const totalSpend = day.campusSpend + day.homeSpend;
                     const maxScale = Math.max(analytics.dailyMaxSpend, analytics.expectedDailyBudget, 1);
-                    const campusPct = (day.campusSpend / maxScale) * 100;
-                    const homePct = (day.homeSpend / maxScale) * 100;
+                    const campusPct = Math.min(100, (day.campusSpend / maxScale) * 100);
+                    const homePct = Math.min(100, (day.homeSpend / maxScale) * 100);
                     const isSelected = selectedDayIso === day.isoDate;
 
                     return (
                       <button
                         key={day.isoDate}
                         type="button"
-                        className={`daily-col-btn ${day.isToday ? "today" : ""} ${isSelected ? "selected" : ""}`}
+                        className={`pulse-day-cell ${day.isToday ? "today" : ""} ${isSelected ? "selected" : ""}`}
                         onClick={() => setSelectedDayIso(isSelected ? null : day.isoDate)}
-                        title={`${day.dayName}: ${money.format(totalSpend)} (${day.ridesCount} rides)`}
+                        aria-label={`${day.dayFullName}: ${money.format(totalSpend)}`}
                       >
-                        <div className="daily-bar-track">
-                          <div className="daily-bar-home" style={{ height: `${homePct}%` }} />
-                          <div className="daily-bar-campus" style={{ height: `${campusPct}%` }} />
+                        {day.isToday && <span className="pulse-today-pip" title="Today" />}
+                        <div className="pulse-cell-header">
+                          <span className="pulse-cell-day">{day.dayName}</span>
+                          <span className="pulse-cell-num">{day.dayNum}</span>
                         </div>
-                        <span className="daily-day-label">{day.dayName.slice(0, 3)}</span>
+                        <div className="pulse-pill-track" title={`Morning: ${money.format(day.campusSpend)}, Evening: ${money.format(day.homeSpend)}`}>
+                          <div className="pulse-pill-campus" style={{ height: `${campusPct}%` }} />
+                          <div className="pulse-pill-home" style={{ height: `${homePct}%` }} />
+                        </div>
+                        <span className="pulse-cell-amount">
+                          {totalSpend > 0 ? Math.round(totalSpend) : "—"}
+                        </span>
                       </button>
                     );
                   })}
                 </div>
-                {selectedDayIso && (
-                  <div style={{ background: "#f5f3eb", borderRadius: "8px", padding: "8px 12px", fontSize: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    {(() => {
-                      const day = analytics.spendingDays.find((d) => d.isoDate === selectedDayIso);
-                      if (!day) return null;
-                      return (
-                        <>
-                          <span><b>{day.dayName}</b>: {money.format(day.campusSpend + day.homeSpend)} ({day.ridesCount} rides)</span>
-                          <button type="button" style={{ border: 0, background: "none", color: "var(--muted)", fontSize: "14px" }} onClick={() => setSelectedDayIso(null)}>×</button>
-                        </>
-                      );
-                    })()}
-                  </div>
-                )}
+
+                {/* Rich Day Inspector Box */}
+                {selectedDayIso && (() => {
+                  const day = analytics.spendingDays.find((d) => d.isoDate === selectedDayIso);
+                  if (!day) return null;
+                  const dayTrips = trips.filter((t) => toLocalDateKey(t.ride_at) === selectedDayIso);
+                  const totalSpend = day.campusSpend + day.homeSpend;
+                  const diff = totalSpend - analytics.expectedDailyBudget;
+
+                  return (
+                    <div className="day-inspector-wrap">
+                      <div className="day-inspector-top">
+                        <div className="day-inspector-title">
+                          <span>{day.dayFullName}, {day.dateStr}</span>
+                          {day.isToday && <span style={{ fontSize: "11px", color: "var(--green)", fontWeight: 700 }}>• Today</span>}
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span className={`day-inspector-tag ${day.ridesCount > 0 ? "college" : "rest"}`}>
+                            {day.ridesCount > 0 ? "College Day" : "Rest Day"}
+                          </span>
+                          <button
+                            type="button"
+                            style={{ border: 0, background: "none", color: "var(--muted)", fontSize: "16px", cursor: "pointer", padding: "0 4px" }}
+                            onClick={() => setSelectedDayIso(null)}
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="day-inspector-metrics-row">
+                        <div className="day-inspector-metric-box">
+                          <span className="day-inspector-metric-label">Your Spend</span>
+                          <span className="day-inspector-metric-val">{money.format(totalSpend)}</span>
+                        </div>
+                        <div className="day-inspector-metric-box">
+                          <span className="day-inspector-metric-label">Daily Target</span>
+                          <span className="day-inspector-metric-val">{money.format(analytics.expectedDailyBudget)}</span>
+                        </div>
+                        <div className="day-inspector-metric-box">
+                          <span className="day-inspector-metric-label">Status</span>
+                          <span
+                            className="day-inspector-metric-val"
+                            style={{
+                              fontSize: "12px",
+                              color: diff > 5 ? "var(--red)" : diff < -5 ? "var(--green)" : "var(--ink)",
+                            }}
+                          >
+                            {totalSpend === 0 ? "No rides" : diff > 0 ? `+${money.format(diff)} over` : `${money.format(Math.abs(diff))} under`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {dayTrips.length > 0 ? (
+                        <div className="day-rides-mini-list">
+                          <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                            Rides on this day ({dayTrips.length})
+                          </span>
+                          {dayTrips.map((t) => (
+                            <div key={t.id} className="day-ride-mini-item">
+                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                                <span>{t.direction === "campus" ? "🎓 Morning Campus" : "🏡 Evening Home"}</span>
+                                <span style={{ color: "var(--muted)", fontSize: "11px" }}>({t.trip_mode})</span>
+                              </div>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <b>{money.format(t.amount)}</b>
+                                <span style={{ fontSize: "11px", color: "var(--muted)" }}>paid by {t.paid_by === currentUserId ? "you" : otherMember?.display_name || t.paid_by}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <div style={{ fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>
+                          No commute logged for this day.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
               </section>
 
               {/* Bus Benchmark (EGP 42,000) */}
@@ -912,6 +1007,43 @@ export default function Home() {
                   <span>{analytics.busUsedPctVal.toFixed(1)}% spent ({money.format(analytics.allTimeTotalSpend)})</span>
                   <span>{analytics.busSavedPctVal.toFixed(1)}% remaining</span>
                 </div>
+
+                {/* Own and other's spending breakdown */}
+                <div className="bus-member-split-section">
+                  <span className="bus-member-split-title">Member Payments & Spending</span>
+                  <div className="bus-member-cards-grid">
+                    <div className="bus-member-card">
+                      <span className="bus-member-label">You ({currentName})</span>
+                      <span className="bus-member-val">{money.format(stats.paidByYou)}</span>
+                      <span className="bus-member-sub">
+                        Paid out of pocket · Personal: {money.format(stats.personalSpendByYou)}
+                      </span>
+                    </div>
+                    <div className="bus-member-card">
+                      <span className="bus-member-label">{otherMember?.display_name || "Co-pilot"}</span>
+                      <span className="bus-member-val">{money.format(stats.paidByOther)}</span>
+                      <span className="bus-member-sub">
+                        Paid out of pocket · Personal: {money.format(stats.personalSpendByOther)}
+                      </span>
+                    </div>
+                  </div>
+                  {stats.total > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "2px" }}>
+                      <div className="bus-member-progress-track">
+                        <div
+                          className="bus-member-progress-fill"
+                          style={{
+                            width: `${(stats.paidByYou / stats.total) * 100}%`,
+                          }}
+                        />
+                      </div>
+                      <div className="bus-member-progress-labels">
+                        <span>You: {((stats.paidByYou / stats.total) * 100).toFixed(0)}%</span>
+                        <span>{otherMember?.display_name || "Co-pilot"}: {((stats.paidByOther / stats.total) * 100).toFixed(0)}%</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </section>
             </main>
           )}
@@ -926,7 +1058,7 @@ export default function Home() {
                     key={hz}
                     type="button"
                     className={`filter-chip ${timeHorizon === hz ? "active" : ""}`}
-                    onClick={() => { setTimeHorizon(hz); setSelectedDayIso(null); }}
+                    onClick={() => { setTimeHorizon(hz); setSelectedDayIso(null); setActiveDailyBar(null); }}
                   >
                     {hz === "week" ? "This Week" : hz === "4weeks" ? "4 Weeks" : hz === "3months" ? "3 Months" : "All time"}
                   </button>
@@ -952,91 +1084,137 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* 1. INTERACTIVE SVG SPENDING TREND CHART (Drawing / Chart) */}
+              {/* 1. NON-CUMULATIVE DAILY SPENDING BAR CHART */}
               <section className="trend-chart-card">
                 <div className="trend-chart-header">
                   <div>
-                    <h4 className="trend-chart-title">Spending Curve & Trends</h4>
-                    <span className="trend-chart-subtitle">Cumulative personal transportation spend</span>
+                    <h4 className="trend-chart-title">Daily Commute Spending</h4>
+                    <span className="trend-chart-subtitle">Discrete spending per active day (non-cumulative)</span>
                   </div>
                   <div className="trend-chart-stat">
-                    <span className="trend-chart-stat-val">{money.format(analytics.totalSpend)}</span>
-                    <span className="trend-chart-stat-sub">{analytics.horizonLabel}</span>
+                    <span className="trend-chart-stat-val">{money.format(analytics.dailySpendingAvg)}</span>
+                    <span className="trend-chart-stat-sub">Daily active avg</span>
                   </div>
                 </div>
 
-                {analytics.spendingTrend.length === 0 ? (
+                {analytics.dailySpendingSeries.length === 0 ? (
                   <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: "12px" }}>
                     No rides recorded in this time window.
                   </div>
                 ) : (
                   <div className="trend-chart-container">
-                    {activeTrendDot && (
+                    {activeDailyBar && (
                       <div className="trend-tooltip">
-                        <span>{activeTrendDot.label}</span>
+                        <span><b>{activeDailyBar.label}</b> ({activeDailyBar.dayName})</span>
                         <span>·</span>
-                        <span>+{money.format(activeTrendDot.amount)}</span>
+                        <span className="trend-tooltip-val">{money.format(activeDailyBar.amount)}</span>
                         <span>·</span>
-                        <span className="trend-tooltip-val">Total {money.format(activeTrendDot.cumulative)}</span>
+                        <span>{activeDailyBar.ridesCount} {activeDailyBar.ridesCount === 1 ? "ride" : "rides"}</span>
                       </div>
                     )}
                     {(() => {
-                      const trend = analytics.spendingTrend;
-                      const maxVal = Math.max(...trend.map((p) => p.cumulative), 1);
+                      const series = analytics.dailySpendingSeries;
+                      const maxVal = Math.max(...series.map((p) => p.amount), analytics.dailySpendingAvg * 1.25, 40);
                       const width = 340;
-                      const height = 130;
-                      const padLeft = 10;
-                      const padRight = 10;
-                      const padTop = 15;
-                      const padBottom = 20;
+                      const height = 140;
+                      const padLeft = 14;
+                      const padRight = 14;
+                      const padTop = 22;
+                      const padBottom = 26;
                       const chartW = width - padLeft - padRight;
                       const chartH = height - padTop - padBottom;
-
-                      const coords = trend.map((p, idx) => {
-                        const x = trend.length === 1 ? padLeft + chartW / 2 : padLeft + (idx / (trend.length - 1)) * chartW;
-                        const y = padTop + chartH - (p.cumulative / maxVal) * chartH;
-                        return { x, y, point: p };
-                      });
-
-                      const linePath = coords.map((c, i) => `${i === 0 ? "M" : "L"} ${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(" ");
-                      const areaPath = `${linePath} L ${coords[coords.length - 1].x.toFixed(1)},${(padTop + chartH).toFixed(1)} L ${coords[0].x.toFixed(1)},${(padTop + chartH).toFixed(1)} Z`;
+                      const avgY = padTop + chartH - (analytics.dailySpendingAvg / maxVal) * chartH;
 
                       return (
-                        <svg className="trend-chart-svg" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-                          <defs>
-                            <linearGradient id="trendGradient" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="0%" stopColor="#2d6a4f" stopOpacity="0.28" />
-                              <stop offset="100%" stopColor="#2d6a4f" stopOpacity="0.0" />
-                            </linearGradient>
-                          </defs>
+                        <div className="daily-bar-chart-container">
+                          <svg className="daily-bar-svg" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
+                            <defs>
+                              <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
+                                <stop offset="0%" stopColor="#2d6a4f" />
+                                <stop offset="100%" stopColor="#40916c" />
+                              </linearGradient>
+                            </defs>
 
-                          {/* Horizontal Grid lines */}
-                          <line x1={padLeft} y1={padTop} x2={width - padRight} y2={padTop} stroke="#ede9df" strokeDasharray="3 3" />
-                          <line x1={padLeft} y1={padTop + chartH / 2} x2={width - padRight} y2={padTop + chartH / 2} stroke="#ede9df" strokeDasharray="3 3" />
-                          <line x1={padLeft} y1={padTop + chartH} x2={width - padRight} y2={padTop + chartH} stroke="#dcd7c9" />
+                            {/* Average baseline */}
+                            <line
+                              x1={padLeft}
+                              y1={avgY}
+                              x2={width - padRight}
+                              y2={avgY}
+                              stroke="#c8c2b4"
+                              strokeDasharray="3 3"
+                              strokeWidth="1"
+                            />
+                            <text
+                              x={width - padRight}
+                              y={Math.max(padTop - 4, avgY - 4)}
+                              textAnchor="end"
+                              fontSize="8"
+                              fontFamily="DM Mono, monospace"
+                              fill="#888e84"
+                            >
+                              avg {Math.round(analytics.dailySpendingAvg)}
+                            </text>
 
-                          {/* Gradient Fill & Line */}
-                          <path d={areaPath} fill="url(#trendGradient)" />
-                          <path d={linePath} fill="none" stroke="#2d6a4f" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                            {/* Bottom baseline */}
+                            <line
+                              x1={padLeft}
+                              y1={padTop + chartH}
+                              x2={width - padRight}
+                              y2={padTop + chartH}
+                              stroke="#ede9df"
+                              strokeWidth="1"
+                            />
 
-                          {/* Interactive Points */}
-                          {coords.map((c, i) => {
-                            const isSelected = activeTrendDot?.date === c.point.date;
-                            return (
-                              <circle
-                                key={i}
-                                cx={c.x}
-                                cy={c.y}
-                                r={isSelected ? 6 : 4}
-                                className={`trend-dot ${isSelected ? "active" : ""}`}
-                                fill={isSelected ? "#d9ff70" : "#ffffff"}
-                                stroke="#2d6a4f"
-                                strokeWidth={isSelected ? "3" : "2.5"}
-                                onClick={() => setActiveTrendDot(isSelected ? null : c.point)}
-                              />
-                            );
-                          })}
-                        </svg>
+                            {/* Daily Bars */}
+                            {series.map((p, idx) => {
+                              const barW = Math.min(26, Math.max(12, chartW / series.length - 8));
+                              const x = padLeft + (idx + 0.5) * (chartW / series.length) - barW / 2;
+                              const barH = Math.max(4, (p.amount / maxVal) * chartH);
+                              const y = padTop + chartH - barH;
+                              const isSelected = activeDailyBar?.date === p.date;
+
+                              return (
+                                <g key={p.date}>
+                                  <rect
+                                    x={x}
+                                    y={y}
+                                    width={barW}
+                                    height={barH}
+                                    rx={4}
+                                    className={`daily-chart-bar ${isSelected ? "active" : ""}`}
+                                    fill={isSelected ? "var(--lime)" : "url(#barGradient)"}
+                                    onClick={() => setActiveDailyBar(isSelected ? null : p)}
+                                  />
+                                  {/* Day label */}
+                                  <text
+                                    x={x + barW / 2}
+                                    y={height - 8}
+                                    textAnchor="middle"
+                                    fontSize="9"
+                                    fontFamily="DM Mono, monospace"
+                                    fill={isSelected ? "var(--green)" : "var(--muted)"}
+                                    fontWeight={isSelected ? "800" : "500"}
+                                  >
+                                    {p.dayName}
+                                  </text>
+                                  {/* Value label above bar */}
+                                  <text
+                                    x={x + barW / 2}
+                                    y={y - 4}
+                                    textAnchor="middle"
+                                    fontSize="8"
+                                    fontFamily="DM Mono, monospace"
+                                    fontWeight="700"
+                                    fill={isSelected ? "var(--green)" : "#525950"}
+                                  >
+                                    {Math.round(p.amount)}
+                                  </text>
+                                </g>
+                              );
+                            })}
+                          </svg>
+                        </div>
                       );
                     })()}
                   </div>
@@ -1090,38 +1268,64 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* 3. CARPOOL SAVINGS COMPARISON DRAWING */}
-              <section className="carpool-savings-card">
+              {/* 3. MONTHLY PROJECTION & PERSONAL COMMUTE RUN RATE */}
+              <section className="monthly-runrate-card">
                 <div className="section-header-row" style={{ margin: 0 }}>
-                  <h4 className="trend-chart-title">Carpool Economics vs Solo Booking</h4>
-                  <span className="section-header-meta">50% shared savings</span>
+                  <h4 className="trend-chart-title">Monthly Commute Projection</h4>
+                  <span className="section-header-meta">Personal run rate</span>
                 </div>
-                <div className="carpool-compare-row">
-                  <div className="carpool-compare-item">
-                    <div className="carpool-compare-label-row">
-                      <span>Shared Rides Spend (Your 50% split)</span>
-                      <b>{money.format(analytics.sharedSpendVal / 2)}</b>
-                    </div>
-                    <div className="carpool-bar-track">
-                      <div className="carpool-bar-fill-actual" style={{ width: "50%" }} />
-                    </div>
+
+                <div className="monthly-runrate-hero">
+                  <div className="monthly-runrate-hero-left">
+                    <span className="monthly-runrate-hero-label">Average Monthly Spending (Me Only)</span>
+                    <strong className="monthly-runrate-hero-val">{money.format(analytics.personalMonthlyAvg)}</strong>
+                    <span className="monthly-runrate-hero-sub">Half of shared rides + your solo rides only</span>
                   </div>
-                  <div className="carpool-compare-item">
-                    <div className="carpool-compare-label-row">
-                      <span style={{ color: "var(--muted)" }}>Equivalent Solo Full Fare (If riding alone)</span>
-                      <b style={{ color: "var(--muted)" }}>{money.format(analytics.sharedSpendVal)}</b>
-                    </div>
-                    <div className="carpool-bar-track">
-                      <div className="carpool-bar-fill-solo" style={{ width: "100%" }} />
-                    </div>
+                  <span className="monthly-pacing-tag">Personal Pace</span>
+                </div>
+
+                <div className="payer-split-grid">
+                  <div className="payer-split-box">
+                    <span className="payer-split-label">Monthly Target Budget</span>
+                    <strong className="payer-split-amount">{money.format(weeklyBudget * (52 / 12))}</strong>
+                    <span className="payer-split-pct">Based on {money.format(weeklyBudget)}/week</span>
+                  </div>
+                  <div className="payer-split-box">
+                    <span className="payer-split-label">Carpooled Savings</span>
+                    <strong className="payer-split-amount" style={{ color: "var(--green)" }}>+{money.format(analytics.sharingSavingsVal)}</strong>
+                    <span className="payer-split-pct">50% saved vs solo rides</span>
                   </div>
                 </div>
-                <div className="carpool-saved-callout">
-                  <div>
-                    <div style={{ fontSize: "12px", fontWeight: 600 }}>Total Money Kept in Your Pockets</div>
-                    <small style={{ opacity: 0.75, fontSize: "10px" }}>By carpooling together instead of solo Uber bookings</small>
+
+                {/* Fair Share Payment Balance */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                      Payer Balance & Out of Pocket
+                    </span>
+                    <span style={{ fontSize: "11px", fontWeight: 700, color: stats.net > 0 ? "var(--green)" : stats.net < 0 ? "var(--amber)" : "var(--muted)" }}>
+                      {stats.net > 0
+                        ? `You are owed ${money.format(stats.net)}`
+                        : stats.net < 0
+                        ? `You owe ${money.format(Math.abs(stats.net))}`
+                        : "All settled up"}
+                    </span>
                   </div>
-                  <span className="carpool-saved-badge">+{money.format(analytics.sharingSavingsVal)} saved</span>
+
+                  {stats.total > 0 && (
+                    <>
+                      <div className="payer-bar-track">
+                        <div
+                          className="payer-bar-fill"
+                          style={{ width: `${(stats.paidByYou / stats.total) * 100}%` }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)" }}>
+                        <span>You paid: <b>{money.format(stats.paidByYou)}</b></span>
+                        <span>{otherMember?.display_name || "Co-pilot"} paid: <b>{money.format(stats.paidByOther)}</b></span>
+                      </div>
+                    </>
+                  )}
                 </div>
               </section>
 

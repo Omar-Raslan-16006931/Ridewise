@@ -24,6 +24,8 @@ import {
   toLocalDateKey,
   filterSoloTrips,
   computeSpendingTrend,
+  computeDailySpendingSeries,
+  personalAverageMonthlySpend,
   BUS_BENCHMARK,
 } from "./analytics";
 import type { Member, Trip } from "./types";
@@ -217,4 +219,35 @@ test("computeSpendingTrend aggregates daily amounts and calculates cumulative sp
   assert.equal(trend[1].amount, 60);
   assert.equal(trend[1].cumulative, 190);
 });
+
+test("computeDailySpendingSeries returns discrete non-cumulative spending per day", () => {
+  const sampleTrips: Trip[] = [
+    { id: "t1", ride_at: "2026-09-10T08:00:00.000Z", direction: "campus", amount: 100, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+    { id: "t2", ride_at: "2026-09-10T16:00:00.000Z", direction: "home", amount: 80, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "omar" },
+    { id: "t3", ride_at: "2026-09-11T09:00:00.000Z", direction: "campus", amount: 120, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+  ];
+
+  const series = computeDailySpendingSeries(sampleTrips, "omar");
+  assert.equal(series.length, 2);
+  // Day 1: 50 + 80 = 130
+  assert.equal(series[0].amount, 130);
+  assert.equal(series[0].ridesCount, 2);
+  // Day 2: 60 (discrete, NOT 190 cumulative)
+  assert.equal(series[1].amount, 60);
+  assert.equal(series[1].ridesCount, 1);
+});
+
+test("personalAverageMonthlySpend calculates monthly average for personal commute only", () => {
+  const sampleTrips: Trip[] = [
+    { id: "t1", ride_at: "2026-08-01T08:00:00.000Z", direction: "campus", amount: 100, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+    { id: "t2", ride_at: "2026-08-15T08:00:00.000Z", direction: "campus", amount: 120, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "omar" },
+    { id: "t3", ride_at: "2026-08-30T08:00:00.000Z", direction: "campus", amount: 100, paid_by: "khaled", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "khaled" },
+  ];
+
+  // Omar: t1 (50) + t2 (120) = 170 EGP. t3 was solo by khaled so 0 for Omar.
+  const monthly = personalAverageMonthlySpend(sampleTrips, "omar");
+  assert.ok(monthly > 0, "Monthly personal spend should be greater than 0");
+  assert.ok(monthly <= 200, "Monthly personal spend should reflect personal trips only");
+});
+
 
