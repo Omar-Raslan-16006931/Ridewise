@@ -74,22 +74,14 @@ export default function Home() {
   const supabase = getSupabase();
   const previewMode = !supabase && process.env.NODE_ENV !== "production";
 
-  // Persistent Tab State across app switching
-  const [activeTab, setActiveTabState] = useState<Tab>(() => {
-    if (typeof window === "undefined") return "rides";
-    try {
-      const saved = localStorage.getItem("ridewise_active_tab") as Tab;
-      if (saved && ["rides", "budget", "trends", "space"].includes(saved)) return saved;
-    } catch {}
-    return "rides";
-  });
+  // Tab State - starts fresh on 'rides' on app open
+  const [activeTab, setActiveTab] = useState<Tab>("rides");
 
-  const setActiveTab = (tab: Tab) => {
-    setActiveTabState(tab);
+  useEffect(() => {
     try {
-      localStorage.setItem("ridewise_active_tab", tab);
+      localStorage.removeItem("ridewise_active_tab");
     } catch {}
-  };
+  }, []);
 
   // Persistent User, Group, Members, and Trips State
   const [user, setUser] = useState<AuthUser>(() => {
@@ -141,7 +133,6 @@ export default function Home() {
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>("week");
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [weeklyBudget, setWeeklyBudget] = useState<number>(700);
-  const [selectedDayIso, setSelectedDayIso] = useState<string | null>(null);
   const [soloScope, setSoloScope] = useState<SoloScope>("mine");
   const [activeDailyBar, setActiveDailyBar] = useState<DailySpendPoint | null>(null);
 
@@ -955,12 +946,6 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Saturday -> Friday Clean Native Daily Spending Pulse */}
-              <section className="daily-pulse-card">
-                <div className="daily-pulse-header">
-                  <div>
-                    <h4 className="daily-pulse-title">Daily Spending Pulse</h4>
-                    <span style={{ fontSize: "11px", color: "var(--muted)" }}>Sat → Fri · Personal commute spend</span>
               {/* Monthly Commute Projection: Current vs Expected vs Budget Limit */}
               <section className="monthly-runrate-card">
                 <div className="section-header-row" style={{ margin: 0 }}>
@@ -975,9 +960,6 @@ export default function Home() {
                     <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.currentMonthSpend)}</strong>
                     <span className="monthly-compare-sub">Personal spend</span>
                   </div>
-                  <span style={{ fontSize: "11px", fontFamily: "DM Mono, monospace", color: "var(--green)", fontWeight: 700 }}>
-                    {money.format(analytics.expectedDailyBudget)}/day target
-                  </span>
                   <div className="monthly-compare-card">
                     <span className="monthly-compare-label">Expected</span>
                     <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.expectedMonthlySpend)}</strong>
@@ -990,17 +972,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                <div className="daily-pulse-chart-wrap">
-                  {/* Daily Target Line */}
-                  {(() => {
-                    const maxScale = Math.max(analytics.dailyMaxSpend, analytics.expectedDailyBudget * 1.25, 1);
-                    const targetTopPct = 100 - (analytics.expectedDailyBudget / maxScale) * 100;
-                    return (
-                      <div className="daily-pulse-target-line" style={{ top: `${Math.max(12, Math.min(85, targetTopPct))}%` }}>
-                        <span className="daily-pulse-target-tag">Target {Math.round(analytics.expectedDailyBudget)}</span>
-                      </div>
-                    );
-                  })()}
                 {/* Progress bar vs Monthly Budget Limit */}
                 <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
                   <div className="bus-member-progress-track">
@@ -1022,36 +993,6 @@ export default function Home() {
                   </div>
                 </div>
 
-                  <div className="daily-pulse-cols-grid">
-                    {analytics.spendingDays.map((day) => {
-                      const totalSpend = day.campusSpend + day.homeSpend;
-                      const maxScale = Math.max(analytics.dailyMaxSpend, analytics.expectedDailyBudget * 1.25, 1);
-                      const campusPct = Math.min(100, (day.campusSpend / maxScale) * 100);
-                      const homePct = Math.min(100, (day.homeSpend / maxScale) * 100);
-                      const isOver = totalSpend > analytics.expectedDailyBudget + 0.5;
-                      const isSelected = selectedDayIso === day.isoDate;
-
-                      return (
-                        <button
-                          key={day.isoDate}
-                          type="button"
-                          className={`daily-pulse-col-btn ${isSelected ? "selected" : ""}`}
-                          onClick={() => setSelectedDayIso(isSelected ? null : day.isoDate)}
-                        >
-                          <span className="daily-pulse-val-label" style={{ color: isOver ? "var(--red)" : "var(--ink)" }}>
-                            {totalSpend > 0 ? Math.round(totalSpend) : "—"}
-                          </span>
-                          <div className="daily-pulse-track">
-                            <div className="daily-pulse-fill-campus" style={{ height: `${campusPct}%` }} />
-                            <div className="daily-pulse-fill-home" style={{ height: `${homePct}%` }} />
-                            {isOver && <div className="daily-pulse-fill-over" style={{ height: "4px" }} />}
-                          </div>
-                          <span className={`daily-pulse-day-badge ${day.isToday ? "today" : ""}`}>
-                            {day.dayName}
-                          </span>
-                        </button>
-                      );
-                    })}
                 {/* Run Rate & Weekly Avg */}
                 <div className="monthly-runrate-hero">
                   <div className="monthly-runrate-hero-left">
@@ -1062,76 +1003,6 @@ export default function Home() {
                     </span>
                   </div>
                   <span className="monthly-pacing-tag">4× Weekly</span>
-                </div>
-
-                {/* Inline Day Summary */}
-                {selectedDayIso && (() => {
-                  const day = analytics.spendingDays.find((d) => d.isoDate === selectedDayIso);
-                  if (!day) return null;
-                  const dayTrips = trips.filter((t) => toLocalDateKey(t.ride_at) === selectedDayIso);
-                  const totalSpend = day.campusSpend + day.homeSpend;
-                  const diff = totalSpend - analytics.expectedDailyBudget;
-                {/* Fair Share Payment Balance */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "2px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                      Payer Balance & Out of Pocket
-                    </span>
-                    <span style={{ fontSize: "11px", fontWeight: 700, color: stats.net > 0 ? "var(--green)" : stats.net < 0 ? "var(--amber)" : "var(--muted)" }}>
-                      {stats.net > 0
-                        ? `You are owed ${money.format(stats.net)}`
-                        : stats.net < 0
-                        ? `You owe ${money.format(Math.abs(stats.net))}`
-                        : "All settled up"}
-                    </span>
-                  </div>
-
-                  return (
-                    <div className="daily-pulse-inline-summary">
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div>
-                          <b>{day.dayFullName}, {day.dateStr}</b>
-                          {day.isToday && <span style={{ marginLeft: "6px", color: "var(--green)", fontWeight: 700 }}>• Today</span>}
-                        </div>
-                        <button
-                          type="button"
-                          style={{ border: 0, background: "none", color: "var(--muted)", fontSize: "16px", cursor: "pointer", padding: "0 4px" }}
-                          onClick={() => setSelectedDayIso(null)}
-                        >
-                          ×
-                        </button>
-                  {stats.total > 0 && (
-                    <>
-                      <div className="payer-bar-track">
-                        <div
-                          className="payer-bar-fill"
-                          style={{ width: `${(stats.paidByYou / stats.total) * 100}%` }}
-                        />
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--ink)", fontWeight: 600 }}>
-                        <span>Spend: {money.format(totalSpend)} ({day.ridesCount} {day.ridesCount === 1 ? "ride" : "rides"})</span>
-                        <span style={{ color: diff > 5 ? "var(--red)" : diff < -5 ? "var(--green)" : "var(--muted)" }}>
-                          {totalSpend === 0 ? "Rest day" : diff > 0 ? `+${money.format(diff)} over target` : `${money.format(Math.abs(diff))} under target`}
-                        </span>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)" }}>
-                        <span>You paid: <b>{money.format(stats.paidByYou)}</b></span>
-                        <span>{otherMember?.display_name || "Co-pilot"} paid: <b>{money.format(stats.paidByOther)}</b></span>
-                      </div>
-                      {dayTrips.length > 0 && (
-                        <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px", borderTop: "1px solid #ede8dc", paddingTop: "6px" }}>
-                          {dayTrips.map((t) => (
-                            <div key={t.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)" }}>
-                              <span>{t.direction === "campus" ? "🎓 Campus" : "🏡 Home"} ({t.trip_mode})</span>
-                              <span><b>{money.format(t.amount)}</b> · paid by {t.paid_by === currentUserId ? "you" : otherMember?.display_name || t.paid_by}</span>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-                    </>
-                  )}
                 </div>
               </section>
 
@@ -1201,7 +1072,7 @@ export default function Home() {
                     key={hz}
                     type="button"
                     className={`filter-chip ${timeHorizon === hz ? "active" : ""}`}
-                    onClick={() => { setTimeHorizon(hz); setSelectedDayIso(null); setActiveDailyBar(null); }}
+                    onClick={() => { setTimeHorizon(hz); setActiveDailyBar(null); }}
                   >
                     {hz === "week" ? "This Week" : hz === "4weeks" ? "4 Weeks" : hz === "3months" ? "3 Months" : "All time"}
                   </button>
@@ -1411,98 +1282,6 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* 3. MONTHLY PROJECTION: CURRENT VS EXPECTED VS BUDGET LIMIT */}
-              <section className="monthly-runrate-card">
-                <div className="section-header-row" style={{ margin: 0 }}>
-                  <h4 className="trend-chart-title">Monthly Commute Projection</h4>
-                  <span className="section-header-meta">Avg weekly × 4</span>
-                </div>
-
-                {/* 3 Comparison Cards: Current Monthly Spend vs Expected vs Budget Limit */}
-                <div className="monthly-compare-trio">
-                  <div className="monthly-compare-card highlight">
-                    <span className="monthly-compare-label">Current Month</span>
-                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.currentMonthSpend)}</strong>
-                    <span className="monthly-compare-sub">Personal spend</span>
-                  </div>
-                  <div className="monthly-compare-card">
-                    <span className="monthly-compare-label">Expected</span>
-                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.expectedMonthlySpend)}</strong>
-                    <span className="monthly-compare-sub">College days pacing</span>
-                  </div>
-                  <div className="monthly-compare-card">
-                    <span className="monthly-compare-label">Budget Limit</span>
-                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.monthlyBudgetLimit)}</strong>
-                    <span className="monthly-compare-sub">Weekly × 4</span>
-                  </div>
-                </div>
-
-                {/* Progress bar vs Monthly Budget Limit */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
-                  <div className="bus-member-progress-track">
-                    <div
-                      className="bus-member-progress-fill"
-                      style={{
-                        width: `${Math.min(100, analytics.monthlyMetrics.pctOfLimit)}%`,
-                        background: analytics.monthlyMetrics.pctOfLimit > 100 ? "var(--red)" : "var(--green)",
-                      }}
-                    />
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)", fontFamily: "DM Mono, monospace" }}>
-                    <span>{analytics.monthlyMetrics.pctOfLimit.toFixed(0)}% of limit</span>
-                    <span style={{ color: analytics.monthlyMetrics.diffFromLimit < 0 ? "var(--red)" : "var(--green)", fontWeight: 600 }}>
-                      {analytics.monthlyMetrics.diffFromLimit >= 0
-                        ? `${money.format(analytics.monthlyMetrics.diffFromLimit)} remaining`
-                        : `${money.format(Math.abs(analytics.monthlyMetrics.diffFromLimit))} over limit`}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Run Rate & Weekly Avg */}
-                <div className="monthly-runrate-hero">
-                  <div className="monthly-runrate-hero-left">
-                    <span className="monthly-runrate-hero-label">Weekly Avg → Monthly Projection (× 4)</span>
-                    <strong className="monthly-runrate-hero-val">{money.format(analytics.monthlyMetrics.averageMonthlySpend)}</strong>
-                    <span className="monthly-runrate-hero-sub">
-                      Based on {money.format(analytics.monthlyMetrics.averageWeeklySpend)}/wk personal average
-                    </span>
-                  </div>
-                  <span className="monthly-pacing-tag">4× Weekly</span>
-                </div>
-
-                {/* Fair Share Payment Balance */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "2px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                      Payer Balance & Out of Pocket
-                    </span>
-                    <span style={{ fontSize: "11px", fontWeight: 700, color: stats.net > 0 ? "var(--green)" : stats.net < 0 ? "var(--amber)" : "var(--muted)" }}>
-                      {stats.net > 0
-                        ? `You are owed ${money.format(stats.net)}`
-                        : stats.net < 0
-                        ? `You owe ${money.format(Math.abs(stats.net))}`
-                        : "All settled up"}
-                    </span>
-                  </div>
-
-                  {stats.total > 0 && (
-                    <>
-                      <div className="payer-bar-track">
-                        <div
-                          className="payer-bar-fill"
-                          style={{ width: `${(stats.paidByYou / stats.total) * 100}%` }}
-                        />
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)" }}>
-                        <span>You paid: <b>{money.format(stats.paidByYou)}</b></span>
-                        <span>{otherMember?.display_name || "Co-pilot"} paid: <b>{money.format(stats.paidByOther)}</b></span>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </section>
-
-              {/* 4. SOLO RIDES SCOPE SELECTOR & DEEP DIVE */}
               {/* 3. SOLO RIDES SCOPE SELECTOR & DEEP DIVE */}
               <section style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "var(--shadow-sm)" }}>
                 <div className="solo-scope-wrap">
