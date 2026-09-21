@@ -157,6 +157,14 @@ export default function Home() {
   const [weeklyBudget, setWeeklyBudget] = useState<number>(700);
   const [soloScope, setSoloScope] = useState<SoloScope>("mine");
   const [activeDailyBar, setActiveDailyBar] = useState<DailySpendPoint | null>(null);
+  const [hasPasskey, setHasPasskey] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    try {
+      return Boolean(localStorage.getItem("ridewise_passkey_v1"));
+    } catch {
+      return false;
+    }
+  });
 
   // Load saved budget from localStorage on initial render
   useEffect(() => {
@@ -585,23 +593,173 @@ export default function Home() {
   }
 
   async function registerPasskey() {
-    if (!supabase || !user) return;
-    if (!window.PublicKeyCredential) return notify("Passkeys are not supported in this browser.", "error");
-    if (!window.isSecureContext) return notify("Passkeys require an HTTPS connection.", "error");
+    if (!window.PublicKeyCredential) return notify("Passkeys/Face ID are not supported in this browser.", "error");
+    if (!window.isSecureContext && window.location.hostname !== "localhost") {
+      return notify("Passkeys require an HTTPS connection.", "error");
+    }
+    if (!user) return notify("Please sign in first before enrolling Face ID.", "info");
+
     try {
-      const result = await supabase.auth.mfa.webauthn.register({ friendlyName: `Ridewise ${currentName}` });
-      if (result.error) {
-        const errorText = result.error.message.toLowerCase();
-        if (errorText.includes("mfa enroll is disabled") || errorText.includes("mfa_webauthn_enroll_not_enabled")) {
-          return notify("Passkeys disabled in Supabase. Enable MFA in settings.", "error");
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+      const userIdBytes = new TextEncoder().encode(user.id);
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+      const credential = (await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: {
+            name: "Ridewise",
+            ...(isLocalhost ? {} : { id: window.location.hostname }),
+          },
+          user: {
+            id: userIdBytes,
+            name: user.email || currentName,
+            displayName: currentName || user.email?.split("@")[0] || "Ridewise Rider",
+          },
+          pubKeyCredParams: [
+            { alg: -7, type: "public-key" },  // ES256 (Apple Face ID / Touch ID)
+            { alg: -257, type: "public-key" }, // RS256 (Windows Hello)
+          ],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "preferred",
+            residentKey: "preferred",
+          },
+          timeout: 60000,
+          attestation: "none",
+        },
+      })) as PublicKeyCredential | null;
+
+      if (!credential) return notify("Passkey setup was cancelled.", "info");
+
+      let sessionData: { access_token: string; refresh_token: string } | undefined;
+      if (supabase) {
+        const { data } = await supabase.auth.getSession();
+        if (data.session) {
+          sessionData = {
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+          };
         }
-        return notify(result.error.message, "error");
       }
-      notify("Passkey registered on this device!", "success");
-    } catch (error) {
-      const errorName = error instanceof DOMException ? error.name : "";
+
+      const record = {
+        credentialId: credential.id,
+        userId: user.id,
+        userEmail: user.email ?? "",
+        userName: currentName,
+        createdAt: new Date().toISOString(),
+        session: sessionData,
+      };
+
+      try {
+        localStorage.setItem("ridewise_passkey_v1", JSON.stringify(record));
+        setHasPasskey(true);
+      } catch {}
+
+      notify("Face ID / Passkey registered on this device!", "success");
+    } catch (error: any) {
+      const errorName = error instanceof DOMException ? error.name : error?.name;
       if (errorName === "NotAllowedError") return notify("Passkey setup was cancelled.", "info");
       notify(error instanceof Error ? error.message : "Passkey setup failed.", "error");
+    }
+  }
+
+  async function verifyPasskey() {
+    if (!window.PublicKeyCredential) return notify("Passkeys/Face ID are not supported in this browser.", "error");
+    try {
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          ...(isLocalhost ? {} : { rpId: window.location.hostname }),
+          timeout: 60000,
+          userVerification: "preferred",
+        },
+      });
+
+      if (assertion) {
+        if (supabase) {
+          const { data } = await supabase.auth.getSession();
+          if (data.session) {
+            try {
+              const raw = localStorage.getItem("ridewise_passkey_v1");
+              if (raw) {
+                const parsed = JSON.parse(raw);
+                parsed.session = {
+                  access_token: data.session.access_token,
+                  refresh_token: data.session.refresh_token,
+                };
+                localStorage.setItem("ridewise_passkey_v1", JSON.stringify(parsed));
+              }
+            } catch {}
+          }
+        }
+        notify("Face ID verified successfully! ✓", "success");
+      }
+    } catch (error: any) {
+      const errorName = error instanceof DOMException ? error.name : error?.name;
+      if (errorName === "NotAllowedError") return notify("Biometric prompt was cancelled.", "info");
+      notify(error instanceof Error ? error.message : "Biometric verification failed.", "error");
+    }
+  }
+
+  function removePasskey() {
+    if (!window.confirm("Remove Face ID / Passkey from this device?")) return;
+    try {
+      localStorage.removeItem("ridewise_passkey_v1");
+      setHasPasskey(false);
+      notify("Passkey removed from this device.", "info");
+    } catch {}
+  }
+
+  async function signInWithPasskey() {
+    if (!window.PublicKeyCredential) return notify("Passkeys/Face ID are not supported in this browser.", "error");
+    try {
+      const challenge = new Uint8Array(32);
+      window.crypto.getRandomValues(challenge);
+      const isLocalhost = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+
+      const assertion = await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          ...(isLocalhost ? {} : { rpId: window.location.hostname }),
+          timeout: 60000,
+          userVerification: "preferred",
+        },
+      });
+
+      if (!assertion) return;
+
+      const raw = localStorage.getItem("ridewise_passkey_v1");
+      if (!raw) return notify("No passkey saved on this device.", "error");
+      const record = JSON.parse(raw);
+
+      if (supabase && record.session?.refresh_token) {
+        const { data, error } = await supabase.auth.setSession({
+          access_token: record.session.access_token,
+          refresh_token: record.session.refresh_token,
+        });
+        if (error || !data.user) {
+          notify("Session expired. Please sign in with Google once to re-sync Face ID.", "info");
+          setModal("sign-in");
+          return;
+        }
+        setModal(null);
+        await handleAuthSession({ id: data.user.id, email: data.user.email });
+        notify(`Welcome back, ${record.userName || "rider"}! Face ID verified.`, "success");
+      } else {
+        notify("Face ID verified! Please sign in with Google to sync cloud workspace.", "info");
+        setModal("sign-in");
+      }
+    } catch (error: any) {
+      const errorName = error instanceof DOMException ? error.name : error?.name;
+      if (errorName === "NotAllowedError") return notify("Face ID sign-in cancelled.", "info");
+      notify(error instanceof Error ? error.message : "Face ID sign-in failed.", "error");
     }
   }
 
@@ -679,7 +837,26 @@ export default function Home() {
                 <button className="hero-action-btn hero-action-secondary" style={{ color: "var(--ink)", border: "1px solid var(--line)" }} onClick={() => setModal("join-space")}>Join with Code</button>
               </>
             ) : (
-              <button className="sheet-submit-btn" onClick={() => setModal("sign-in")}>Sign In with Google</button>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%", maxWidth: "320px" }}>
+                {hasPasskey && (
+                  <button
+                    type="button"
+                    className="sheet-submit-btn"
+                    style={{ background: "linear-gradient(135deg, #10b981, #059669)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
+                    onClick={() => void signInWithPasskey()}
+                  >
+                    <span>🔑</span> Sign in with Face ID
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className={hasPasskey ? "hero-action-btn hero-action-secondary" : "sheet-submit-btn"}
+                  style={hasPasskey ? { color: "var(--ink)", border: "1px solid var(--line)" } : {}}
+                  onClick={() => setModal("sign-in")}
+                >
+                  Sign In with Google
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -750,7 +927,7 @@ export default function Home() {
                       {analytics.todayMetrics.todayRemaining >= 0 ? (
                         <>
                           <span className="today-budget-amount">{money.format(analytics.todayMetrics.todayRemaining)}</span>
-                          <span className="today-budget-sub">remaining today</span>
+                          <span className="today-budget-sub">left today</span>
                         </>
                       ) : (
                         <>
@@ -764,16 +941,20 @@ export default function Home() {
                     className={`budget-badge ${
                       analytics.todayMetrics.todayRemaining < 0
                         ? "over"
+                        : analytics.todayMetrics.todayRemaining === 0
+                        ? "on"
                         : analytics.todayMetrics.todayActualSpend === 0
                         ? "on"
                         : "under"
                     }`}
                   >
-                    {analytics.todayMetrics.todayRemaining > 0 &&
-                      (analytics.todayMetrics.todayActualSpend === 0 ? "Untouched" : "Within budget")}
-                    {analytics.todayMetrics.todayRemaining === 0 && "Budget reached"}
-                    {analytics.todayMetrics.todayRemaining < 0 &&
-                      `${money.format(Math.abs(analytics.todayMetrics.todayRemaining))} over`}
+                    {analytics.todayMetrics.todayRemaining < 0
+                      ? "Over limit"
+                      : analytics.todayMetrics.todayRemaining === 0
+                      ? "Budget met"
+                      : analytics.todayMetrics.todayActualSpend === 0
+                      ? "Untouched"
+                      : "On track"}
                   </span>
                 </div>
 
@@ -795,8 +976,15 @@ export default function Home() {
                   </div>
                 </div>
 
-                {/* 3-Part Footer Stats: Spent today, Today's budget, Remaining */}
+                {/* 3-Part Footer Stats: Daily allowance, Spent today, Rides logged */}
                 <div className="today-budget-footer">
+                  <div className="today-budget-stat">
+                    <span className="today-stat-label">Daily allowance</span>
+                    <span className="today-stat-val">
+                      {money.format(analytics.todayMetrics.todayBudget)}
+                    </span>
+                  </div>
+                  <div className="today-budget-divider" />
                   <div className="today-budget-stat">
                     <span className="today-stat-label">Spent today</span>
                     <span className="today-stat-val">
@@ -805,22 +993,9 @@ export default function Home() {
                   </div>
                   <div className="today-budget-divider" />
                   <div className="today-budget-stat">
-                    <span className="today-stat-label">Today’s budget</span>
+                    <span className="today-stat-label">Rides logged</span>
                     <span className="today-stat-val">
-                      {money.format(analytics.todayMetrics.todayBudget)}
-                    </span>
-                  </div>
-                  <div className="today-budget-divider" />
-                  <div className="today-budget-stat">
-                    <span className="today-stat-label">Remaining</span>
-                    <span
-                      className={`today-stat-val ${
-                        analytics.todayMetrics.todayRemaining < 0 ? "over" : "positive"
-                      }`}
-                    >
-                      {analytics.todayMetrics.todayRemaining >= 0
-                        ? money.format(analytics.todayMetrics.todayRemaining)
-                        : `-${money.format(Math.abs(analytics.todayMetrics.todayRemaining))}`}
+                      {analytics.todayMetrics.todayRidesCount} {analytics.todayMetrics.todayRidesCount === 1 ? "ride" : "rides"}
                     </span>
                   </div>
                 </div>
@@ -1583,20 +1758,51 @@ export default function Home() {
                 </button>
 
                 {supabase && user && (
-                  <button
-                    type="button"
-                    className="settings-item-btn"
-                    onClick={() => void registerPasskey()}
-                  >
-                    <div className="settings-item-title">
-                      <span>🔑</span>
-                      <div>
-                        <div>Biometric Passkey</div>
-                        <span className="settings-item-sub">Fast Face ID / fingerprint sign in</span>
+                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <button
+                      type="button"
+                      className="settings-item-btn"
+                      style={{ flex: 1 }}
+                      onClick={() => void (hasPasskey ? verifyPasskey() : registerPasskey())}
+                    >
+                      <div className="settings-item-title">
+                        <span>🔑</span>
+                        <div>
+                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                            <span>Biometric Passkey</span>
+                            {hasPasskey && (
+                              <span style={{ fontSize: "10px", fontWeight: 700, color: "#059669", background: "#d1fae5", padding: "1px 6px", borderRadius: "100px" }}>
+                                Active ✓
+                              </span>
+                            )}
+                          </div>
+                          <span className="settings-item-sub">
+                            {hasPasskey ? "Face ID / Touch ID active · Tap to verify" : "Enable Face ID / fingerprint for fast access"}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                    <span style={{ color: "var(--muted)" }}>›</span>
-                  </button>
+                      <span style={{ color: "var(--muted)" }}>›</span>
+                    </button>
+                    {hasPasskey && (
+                      <button
+                        type="button"
+                        aria-label="Remove Passkey"
+                        title="Remove Passkey from this device"
+                        onClick={removePasskey}
+                        style={{
+                          background: "none",
+                          border: "none",
+                          color: "var(--muted)",
+                          fontSize: "14px",
+                          cursor: "pointer",
+                          padding: "10px",
+                          borderRadius: "8px",
+                        }}
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 {supabase && user ? (
@@ -1726,6 +1932,8 @@ export default function Home() {
             if (result.error) return notify(result.error.message, "error");
             setModal(null);
           }}
+          hasPasskey={hasPasskey}
+          onSignInPasskey={signInWithPasskey}
         />
       )}
     </div>
@@ -1751,6 +1959,8 @@ function BottomSheetWindow({
   onCreate,
   onJoin,
   onSignIn,
+  hasPasskey,
+  onSignInPasskey,
 }: {
   modal: Exclude<Modal, null>;
   close: () => void;
@@ -1767,6 +1977,8 @@ function BottomSheetWindow({
   onCreate: (name: string, person: string) => Promise<void>;
   onJoin: (code: string, person: string) => Promise<void>;
   onSignIn: () => Promise<void>;
+  hasPasskey?: boolean;
+  onSignInPasskey?: () => Promise<void>;
 }) {
   const now = new Date();
   const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -2011,9 +2223,28 @@ function BottomSheetWindow({
             <p style={{ fontSize: "13px", color: "var(--muted)", margin: 0, lineHeight: 1.4 }}>
               Sign in with your approved Google account to open your shared ride workspace with Khaled.
             </p>
+            {hasPasskey && onSignInPasskey && (
+              <button
+                type="button"
+                className="sheet-submit-btn"
+                style={{
+                  background: "linear-gradient(135deg, #10b981, #059669)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: "8px",
+                }}
+                onClick={() => {
+                  void onSignInPasskey();
+                }}
+              >
+                <span>🔑</span> Sign in with Face ID
+              </button>
+            )}
             <button
               type="button"
-              className="sheet-submit-btn"
+              className={hasPasskey ? "hero-action-btn hero-action-secondary" : "sheet-submit-btn"}
+              style={hasPasskey ? { color: "var(--ink)", border: "1px solid var(--line)" } : {}}
               onClick={() => {
                 handleClose();
                 void onSignIn();
