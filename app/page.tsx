@@ -33,6 +33,7 @@ import {
   personalAverageWeeklySpend,
   personalAverageMonthlySpend,
   computeMonthlyComparisonMetrics,
+  computeTodayBudget,
   type SoloScope,
   type TrendDataPoint,
   type DailySpendPoint,
@@ -457,7 +458,11 @@ export default function Home() {
       currencyFormatter: money,
     });
 
+    // Today's Budget Metrics
+    const todayMetrics = computeTodayBudget(trips, currentUserId, weeklyBudget, now, EXPECTED_COLLEGE_DAYS);
+
     return {
+      todayMetrics,
       horizonLabel,
       weekLabel: `${dateFormatter.format(weekStart)} – ${dateFormatter.format(weekEnd)}`,
       totalSpend,
@@ -733,6 +738,93 @@ export default function Home() {
                   </button>
                 </div>
               )}
+
+              {/* TODAY'S COMMUTE BUDGET CARD */}
+              <section className="today-budget-card">
+                <div className="today-budget-header">
+                  <div className="today-budget-title-wrap">
+                    <span className="today-budget-eyebrow">
+                      Today’s Allowance · {new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(new Date())}
+                    </span>
+                    <div className="today-budget-title">
+                      {analytics.todayMetrics.todayRemaining >= 0 ? (
+                        <>
+                          <span className="today-budget-amount">{money.format(analytics.todayMetrics.todayRemaining)}</span>
+                          <span className="today-budget-sub">remaining today</span>
+                        </>
+                      ) : (
+                        <>
+                          <span className="today-budget-amount over">{money.format(Math.abs(analytics.todayMetrics.todayRemaining))}</span>
+                          <span className="today-budget-sub over">over today’s budget</span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <span
+                    className={`budget-badge ${
+                      analytics.todayMetrics.todayRemaining < 0
+                        ? "over"
+                        : analytics.todayMetrics.todayActualSpend === 0
+                        ? "on"
+                        : "under"
+                    }`}
+                  >
+                    {analytics.todayMetrics.todayRemaining > 0 &&
+                      (analytics.todayMetrics.todayActualSpend === 0 ? "Untouched" : "Within budget")}
+                    {analytics.todayMetrics.todayRemaining === 0 && "Budget reached"}
+                    {analytics.todayMetrics.todayRemaining < 0 &&
+                      `${money.format(Math.abs(analytics.todayMetrics.todayRemaining))} over`}
+                  </span>
+                </div>
+
+                {/* Progress Bar */}
+                <div className="today-budget-progress-wrap">
+                  <div className="today-budget-progress-bar">
+                    <div
+                      className={`today-budget-progress-fill ${
+                        analytics.todayMetrics.todayActualSpend > analytics.todayMetrics.todayBudget
+                          ? "over"
+                          : analytics.todayMetrics.todayPct >= 80
+                          ? "warning"
+                          : ""
+                      }`}
+                      style={{
+                        width: `${Math.min(100, Math.max(0, analytics.todayMetrics.todayPct))}%`,
+                      }}
+                    />
+                  </div>
+                </div>
+
+                {/* 3-Part Footer Stats: Spent today, Today's budget, Remaining */}
+                <div className="today-budget-footer">
+                  <div className="today-budget-stat">
+                    <span className="today-stat-label">Spent today</span>
+                    <span className="today-stat-val">
+                      {money.format(analytics.todayMetrics.todayActualSpend)}
+                    </span>
+                  </div>
+                  <div className="today-budget-divider" />
+                  <div className="today-budget-stat">
+                    <span className="today-stat-label">Today’s budget</span>
+                    <span className="today-stat-val">
+                      {money.format(analytics.todayMetrics.todayBudget)}
+                    </span>
+                  </div>
+                  <div className="today-budget-divider" />
+                  <div className="today-budget-stat">
+                    <span className="today-stat-label">Remaining</span>
+                    <span
+                      className={`today-stat-val ${
+                        analytics.todayMetrics.todayRemaining < 0 ? "over" : "positive"
+                      }`}
+                    >
+                      {analytics.todayMetrics.todayRemaining >= 0
+                        ? money.format(analytics.todayMetrics.todayRemaining)
+                        : `-${money.format(Math.abs(analytics.todayMetrics.todayRemaining))}`}
+                    </span>
+                  </div>
+                </div>
+              </section>
 
               {/* Feed Filter Chips */}
               <div className="filter-bar">

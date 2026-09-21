@@ -284,6 +284,150 @@ button {
   background: rgba(255, 255, 255, 0.18);
 }
 
+/* TODAY'S BUDGET CARD (HOME PAGE) */
+.today-budget-card {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 4px 14px rgba(36, 66, 52, 0.04);
+}
+
+.today-budget-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.today-budget-title-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.today-budget-eyebrow {
+  font-family: "DM Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.today-budget-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0;
+}
+
+.today-budget-amount {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.8px;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.today-budget-amount.over {
+  color: #c93b2b;
+}
+
+.today-budget-sub {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted);
+}
+
+.today-budget-sub.over {
+  color: #c93b2b;
+  font-weight: 600;
+}
+
+.today-budget-progress-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.today-budget-progress-bar {
+  height: 8px;
+  background: #e9e6dd;
+  border-radius: 100px;
+  overflow: hidden;
+  position: relative;
+}
+
+.today-budget-progress-fill {
+  height: 100%;
+  background: var(--lime);
+  border-radius: 100px;
+  transition: width 0.35s ease;
+}
+
+.today-budget-progress-fill.warning {
+  background: #eab308;
+}
+
+.today-budget-progress-fill.over {
+  background: #e07a68;
+}
+
+.today-budget-footer {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  align-items: center;
+  background: #f8f6f0;
+  border-radius: var(--radius-md);
+  border: 1px solid #ece9df;
+  padding: 8px 12px;
+}
+
+.today-budget-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.today-budget-stat:last-child {
+  text-align: right;
+}
+
+.today-budget-stat:nth-child(3) {
+  text-align: center;
+}
+
+.today-stat-label {
+  font-size: 10px;
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.today-stat-val {
+  font-family: "DM Mono", monospace;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.today-stat-val.positive {
+  color: #23513b;
+}
+
+.today-stat-val.over {
+  color: #c93b2b;
+}
+
+.today-budget-divider {
+  width: 1px;
+  height: 20px;
+  background: #ece9df;
+}
+
 /* FILTER PILL BAR */
 .filter-bar {
   display: flex;

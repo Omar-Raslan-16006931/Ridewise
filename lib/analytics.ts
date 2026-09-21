@@ -207,6 +207,37 @@ export function personalCollegeDaysUsed(trips: Trip[], memberId: string): number
 }
 
 /**
+ * Computes today's personal commute spending, today's budget allowance, and remaining budget today.
+ */
+export function computeTodayBudget(
+  trips: Trip[],
+  memberId: string,
+  weeklyBudget: number,
+  referenceDate: Date = new Date(),
+  collegeDays = EXPECTED_COLLEGE_DAYS
+) {
+  const todayIso = toLocalDateKey(referenceDate);
+  const todayTrips = trips.filter((t) => toLocalDateKey(t.ride_at) === todayIso);
+  const todayActualSpend = personalTotal(todayTrips, memberId);
+  const todayRidesCount = todayTrips.filter((t) => t.trip_mode === "shared" || t.solo_by === memberId).length;
+  const todayBudget = dailyBudget(weeklyBudget, collegeDays);
+  const todayRemaining = todayBudget - todayActualSpend;
+  const todayPct = todayBudget > 0 ? (todayActualSpend / todayBudget) * 100 : 0;
+  const isOverBudget = todayRemaining < 0;
+
+  return {
+    todayIso,
+    todayTrips,
+    todayActualSpend,
+    todayRidesCount,
+    todayBudget,
+    todayRemaining,
+    todayPct,
+    isOverBudget,
+  };
+}
+
+/**
  * Total spending for rides to campus.
  */
 export function campusTotal(trips: Trip[]): number {

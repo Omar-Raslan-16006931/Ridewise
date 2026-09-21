@@ -282,4 +282,40 @@ test("personalAverageMonthlySpend is average of all logged days multiplied by 4 
   assert.equal(redMetrics.statusColor, "red");
 });
 
+test("computeTodayBudget calculates today's budget, personal spend, and remaining budget", () => {
+  const { computeTodayBudget } = require("./analytics");
+  const todayRef = new Date(2026, 8, 21, 14, 0, 0); // Monday Sept 21, 2026
+  const testTrips: Trip[] = [
+    // Today's rides:
+    { id: "t1", ride_at: "2026-09-21T07:30:00.000Z", direction: "campus", amount: 120, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+    { id: "t2", ride_at: "2026-09-21T15:30:00.000Z", direction: "home", amount: 80, paid_by: "khaled", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "khaled" },
+    // Yesterday's ride:
+    { id: "t3", ride_at: "2026-09-20T08:00:00.000Z", direction: "campus", amount: 110, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "shared", solo_by: null },
+  ];
+
+  // Weekly budget: 700 EGP across 4 college days -> Daily allowance = 175 EGP
+  // Omar's today spend:
+  // t1 is shared 120 -> Omar's share = 60
+  // t2 is Khaled's solo -> Omar's share = 0
+  // Total today = 60 EGP
+  const omarToday = computeTodayBudget(testTrips, "omar", 700, todayRef);
+  assert.equal(omarToday.todayBudget, 175);
+  assert.equal(omarToday.todayActualSpend, 60);
+  assert.equal(omarToday.todayRemaining, 115); // 175 - 60 = 115
+  assert.equal(omarToday.isOverBudget, false);
+  assert.equal(omarToday.todayRidesCount, 1);
+
+  // If Omar spent 200 EGP (over budget):
+  const overTrips: Trip[] = [
+    ...testTrips,
+    { id: "t4", ride_at: "2026-09-21T18:00:00.000Z", direction: "home", amount: 140, paid_by: "omar", notes: null, settled_at: null, settled_by: null, trip_mode: "solo", solo_by: "omar" },
+  ];
+  // Now Omar today spend = 60 + 140 = 200 EGP
+  const omarOver = computeTodayBudget(overTrips, "omar", 700, todayRef);
+  assert.equal(omarOver.todayBudget, 175);
+  assert.equal(omarOver.todayActualSpend, 200);
+  assert.equal(omarOver.todayRemaining, -25); // 175 - 200 = -25
+  assert.equal(omarOver.isOverBudget, true);
+});
+
 
