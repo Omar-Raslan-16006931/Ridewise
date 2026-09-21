@@ -602,21 +602,91 @@ export function computeDailySpendingSeries(trips: Trip[], memberId?: string): Da
 }
 
 /**
- * Calculates estimated average monthly commute spending for a specific member only.
- * Based on personal trips (half of shared + own solo).
+ * Calculates average weekly personal commute spending for a specific member only.
+ * Based on personal trips (half of shared + own solo) divided by active academic weeks.
  */
-export function personalAverageMonthlySpend(trips: Trip[], memberId: string): number {
+export function personalAverageWeeklySpend(trips: Trip[], memberId: string): number {
   if (!trips || trips.length === 0 || !memberId) return 0;
   const personalTrips = trips.filter((t) => t.trip_mode === "shared" || t.solo_by === memberId);
   if (personalTrips.length === 0) return 0;
 
   const totalSpend = personalTrips.reduce((sum, t) => sum + memberTripSpend(t, memberId), 0);
-  const timestamps = personalTrips.map((t) => new Date(t.ride_at).getTime());
-  const earliest = Math.min(...timestamps);
-  const latest = Math.max(...timestamps, Date.now());
-  const diffDays = Math.max(1, (latest - earliest) / (1000 * 60 * 60 * 24));
-  const months = Math.max(1, diffDays / 30.44);
 
-  return totalSpend / months;
+  // Group trips into unique academic weeks (Sat -> Fri)
+  const weekKeys = new Set<string>();
+  for (const t of personalTrips) {
+    const { start } = getAcademicWeekBounds(0, new Date(t.ride_at));
+    weekKeys.add(toLocalDateKey(start));
+  }
+
+  const activeWeeks = Math.max(1, weekKeys.size);
+  return totalSpend / activeWeeks;
+}
+
+/**
+ * Calculates estimated average monthly commute spending for a specific member only.
+ * Defined strictly as: average weekly personal spend * 4.
+ */
+export function personalAverageMonthlySpend(trips: Trip[], memberId: string): number {
+  return personalAverageWeeklySpend(trips, memberId) * 4;
+}
+
+export type MonthlyComparisonMetrics = {
+  currentMonthSpend: number;
+  expectedMonthlySpend: number;
+  monthlyBudgetLimit: number;
+  averageWeeklySpend: number;
+  averageMonthlySpend: number;
+  diffFromExpected: number;
+  diffFromLimit: number;
+  pctOfLimit: number;
+};
+
+/**
+ * Computes:
+ * 1. Current monthly spending (personal spend in the current calendar month)
+ * 2. Expected monthly spending (college days elapsed this month * daily budget)
+ * 3. Budget limit (weeklyBudget * 4)
+ */
+export function computeMonthlyComparisonMetrics(
+  trips: Trip[],
+  memberId: string,
+  weeklyBudget: number,
+  now = new Date()
+): MonthlyComparisonMetrics {
+  const averageWeeklySpend = personalAverageWeeklySpend(trips, memberId);
+  const averageMonthlySpend = averageWeeklySpend * 4;
+  const monthlyBudgetLimit = (weeklyBudget || 0) * 4;
+
+  const currentYear = now.getFullYear();
+  const currentMonth = now.getMonth();
+  const currentMonthTrips = (trips || []).filter((t) => {
+    const d = new Date(t.ride_at);
+    return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
+  });
+
+  const currentMonthSpend = personalTotal(currentMonthTrips, memberId);
+  const collegeDaysSoFar = personalCollegeDaysUsed(currentMonthTrips, memberId);
+  const dailyBudgetVal = dailyBudget(weeklyBudget, EXPECTED_COLLEGE_DAYS);
+
+  // Expected spend: college days attended so far this month * daily budget
+  const expectedMonthlySpend = collegeDaysSoFar > 0
+    ? collegeDaysSoFar * dailyBudgetVal
+    : dailyBudgetVal;
+
+  const diffFromExpected = currentMonthSpend - expectedMonthlySpend;
+  const diffFromLimit = monthlyBudgetLimit - currentMonthSpend;
+  const pctOfLimit = monthlyBudgetLimit > 0 ? (currentMonthSpend / monthlyBudgetLimit) * 100 : 0;
+
+  return {
+    currentMonthSpend,
+    expectedMonthlySpend,
+    monthlyBudgetLimit,
+    averageWeeklySpend,
+    averageMonthlySpend,
+    diffFromExpected,
+    diffFromLimit,
+    pctOfLimit,
+  };
 }
 

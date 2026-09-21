@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "../lib/supabase";
 import type { Member, RideGroup, Trip } from "../lib/types";
 import {
@@ -30,10 +30,13 @@ import {
   filterSoloTrips,
   computeSpendingTrend,
   computeDailySpendingSeries,
+  personalAverageWeeklySpend,
   personalAverageMonthlySpend,
+  computeMonthlyComparisonMetrics,
   type SoloScope,
   type TrendDataPoint,
   type DailySpendPoint,
+  type MonthlyComparisonMetrics,
 } from "../lib/analytics";
 
 const demoGroup: RideGroup = { id: "demo-group", name: "Omar + Khaled", invite_code: "RIDE2026" };
@@ -70,11 +73,64 @@ function getTripMemberSpend(trip: Trip, memberId: string) {
 export default function Home() {
   const supabase = getSupabase();
   const previewMode = !supabase && process.env.NODE_ENV !== "production";
-  const [activeTab, setActiveTab] = useState<Tab>("rides");
-  const [user, setUser] = useState<AuthUser>(null);
-  const [group, setGroup] = useState<RideGroup | null>(previewMode ? demoGroup : null);
-  const [members, setMembers] = useState<Member[]>(previewMode ? demoMembers : []);
-  const [trips, setTrips] = useState<Trip[]>(previewMode ? demoTrips : []);
+
+  // Persistent Tab State across app switching
+  const [activeTab, setActiveTabState] = useState<Tab>(() => {
+    if (typeof window === "undefined") return "rides";
+    try {
+      const saved = localStorage.getItem("ridewise_active_tab") as Tab;
+      if (saved && ["rides", "budget", "trends", "space"].includes(saved)) return saved;
+    } catch {}
+    return "rides";
+  });
+
+  const setActiveTab = (tab: Tab) => {
+    setActiveTabState(tab);
+    try {
+      localStorage.setItem("ridewise_active_tab", tab);
+    } catch {}
+  };
+
+  // Persistent User, Group, Members, and Trips State
+  const [user, setUser] = useState<AuthUser>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = localStorage.getItem("ridewise_cached_user");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
+  const [group, setGroup] = useState<RideGroup | null>(() => {
+    if (previewMode) return demoGroup;
+    if (typeof window === "undefined") return null;
+    try {
+      const saved = localStorage.getItem("ridewise_cached_group");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return null;
+  });
+
+  const [members, setMembers] = useState<Member[]>(() => {
+    if (previewMode) return demoMembers;
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("ridewise_cached_members");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
+  const [trips, setTrips] = useState<Trip[]>(() => {
+    if (previewMode) return demoTrips;
+    if (typeof window === "undefined") return [];
+    try {
+      const saved = localStorage.getItem("ridewise_cached_trips");
+      if (saved) return JSON.parse(saved);
+    } catch {}
+    return [];
+  });
+
   const [modal, setModal] = useState<Modal>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
@@ -120,7 +176,7 @@ export default function Home() {
   });
 
   const [toasts, setToasts] = useState<{ id: string; type: "success" | "error" | "info"; message: string }[]>([]);
-  const [loading, setLoading] = useState(Boolean(supabase));
+  const [loading, setLoading] = useState(false);
 
   function notify(message: string, type: "success" | "error" | "info" = "success") {
     const id = crypto.randomUUID();
@@ -138,50 +194,77 @@ export default function Home() {
   const currentName = members.find((member) => member.user_id === currentUserId)?.display_name ?? "Omar";
   const otherMember = getOtherMember(members, currentUserId);
 
+  const lastLoadedUserIdRef = useRef<string | null>(null);
+
   async function handleAuthSession(sessionUser: { id: string; email?: string } | null) {
     if (!sessionUser) {
       setUser(null);
       setLoading(false);
+      lastLoadedUserIdRef.current = null;
+      try { localStorage.removeItem("ridewise_cached_user"); } catch {}
       return;
     }
     setUser(sessionUser);
-    void loadWorkspace(sessionUser.id, true);
+    try { localStorage.setItem("ridewise_cached_user", JSON.stringify(sessionUser)); } catch {}
+
+    const isSameUser = lastLoadedUserIdRef.current === sessionUser.id;
+    // Silent background load if same user (stale-while-revalidate), no screen refresh/flicker!
+    void loadWorkspace(sessionUser.id, !isSameUser && !group);
   }
 
   async function loadWorkspace(userId: string, showLoading = false) {
     if (!supabase) return;
     if (showLoading) setLoading(true);
-    const membership = await supabase.from("ride_group_members").select("group_id").eq("user_id", userId).limit(1).maybeSingle();
-    if (membership.error || !membership.data) {
-      setGroup(null);
-      setMembers([]);
-      setTrips([]);
+    lastLoadedUserIdRef.current = userId;
+
+    try {
+      const membership = await supabase.from("ride_group_members").select("group_id").eq("user_id", userId).limit(1).maybeSingle();
+      if (membership.error || !membership.data) {
+        setGroup(null);
+        setMembers([]);
+        setTrips([]);
+        return;
+      }
+      const groupResult = await supabase.from("ride_groups").select("id,name,invite_code").eq("id", membership.data.group_id).single();
+      const [membersResult, tripsResult] = await Promise.all([
+        supabase.from("ride_group_members").select("user_id,display_name").eq("group_id", membership.data.group_id).order("joined_at"),
+        supabase.from("ride_trips").select("id,ride_at,direction,amount,trip_mode,solo_by,paid_by,notes,settled_at,settled_by").eq("group_id", membership.data.group_id).order("ride_at", { ascending: false }),
+      ]);
+      if (groupResult.data) {
+        setGroup(groupResult.data as RideGroup);
+        try { localStorage.setItem("ridewise_cached_group", JSON.stringify(groupResult.data)); } catch {}
+      }
+      const newMembers = (membersResult.data ?? []) as Member[];
+      setMembers(newMembers);
+      try { localStorage.setItem("ridewise_cached_members", JSON.stringify(newMembers)); } catch {}
+
+      const newTrips = (tripsResult.data ?? []).map((trip) => ({ ...trip, amount: Number(trip.amount) })) as Trip[];
+      setTrips(newTrips);
+      try { localStorage.setItem("ridewise_cached_trips", JSON.stringify(newTrips)); } catch {}
+    } finally {
       setLoading(false);
-      return;
     }
-    const groupResult = await supabase.from("ride_groups").select("id,name,invite_code").eq("id", membership.data.group_id).single();
-    const [membersResult, tripsResult] = await Promise.all([
-      supabase.from("ride_group_members").select("user_id,display_name").eq("group_id", membership.data.group_id).order("joined_at"),
-      supabase.from("ride_trips").select("id,ride_at,direction,amount,trip_mode,solo_by,paid_by,notes,settled_at,settled_by").eq("group_id", membership.data.group_id).order("ride_at", { ascending: false }),
-    ]);
-    if (groupResult.data) setGroup(groupResult.data as RideGroup);
-    setMembers((membersResult.data ?? []) as Member[]);
-    setTrips((tripsResult.data ?? []).map((trip) => ({ ...trip, amount: Number(trip.amount) })) as Trip[]);
-    setLoading(false);
   }
 
   useEffect(() => {
     if (!supabase) return;
     const authError = new URLSearchParams(window.location.search).get("error_description");
     if (authError) notify(`Google sign-in failed: ${authError.replace(/\+/g, " ")}`, "error");
+
     supabase.auth.getSession().then(({ data }) => {
       const sessionUser = data.session?.user;
       void handleAuthSession(sessionUser ? { id: sessionUser.id, email: sessionUser.email } : null);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+
+    const { data: listener } = supabase.auth.onAuthStateChange((event, session) => {
+      // Don't trigger loading on token refresh when switching back to app
+      if (event === "TOKEN_REFRESHED" && lastLoadedUserIdRef.current === session?.user?.id) {
+        return;
+      }
       const sessionUser = session?.user;
       void handleAuthSession(sessionUser ? { id: sessionUser.id, email: sessionUser.email } : null);
     });
+
     return () => listener.subscription.unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -332,18 +415,21 @@ export default function Home() {
     const homeSharedCount = homeTrips.filter((t) => t.trip_mode === "shared").length;
     const homeSoloCount = filterSoloTrips(homeTrips, soloScope, currentUserId).length;
 
-    // EGP 42,000 Bus Benchmark
-    const allTimeTotalSpend = weeklyTotal(trips);
-    const busSavingsVal = busBenchmarkSavings(allTimeTotalSpend, BUS_BENCHMARK);
-    const busUsedPctVal = busBenchmarkPercentageUsed(allTimeTotalSpend, BUS_BENCHMARK);
-    const busSavedPctVal = busBenchmarkPercentageSaved(allTimeTotalSpend, BUS_BENCHMARK);
-    const allTimeScopedSoloTrips = filterSoloTrips(trips, soloScope, currentUserId);
-    const allTimeSoloSpend = allTimeScopedSoloTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const allTimeSharedSpend = sharedTotal(trips);
-    const soloBusUsedPct = busBenchmarkPercentageUsed(allTimeSoloSpend, BUS_BENCHMARK);
-    const sharedBusUsedPct = busBenchmarkPercentageUsed(allTimeSharedSpend, BUS_BENCHMARK);
+    // EGP 42,000 Bus Benchmark - strictly personal commute (half of shared + own solo)
+    const personalAllTimeSpend = personalTotal(trips, currentUserId);
+    const busSavingsVal = busBenchmarkSavings(personalAllTimeSpend, BUS_BENCHMARK);
+    const busUsedPctVal = busBenchmarkPercentageUsed(personalAllTimeSpend, BUS_BENCHMARK);
+    const busSavedPctVal = busBenchmarkPercentageSaved(personalAllTimeSpend, BUS_BENCHMARK);
+    const personalSharedAllTime = trips.filter((t) => t.trip_mode === "shared").reduce((sum, t) => sum + t.amount / 2, 0);
+    const personalSoloAllTime = trips.filter((t) => t.trip_mode === "solo" && t.solo_by === currentUserId).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const soloBusUsedPct = busBenchmarkPercentageUsed(personalSoloAllTime, BUS_BENCHMARK);
+    const sharedBusUsedPct = busBenchmarkPercentageUsed(personalSharedAllTime, BUS_BENCHMARK);
+
+    // Monthly Comparison Metrics: current vs expected vs budget limit (weekly * 4)
+    const monthlyMetrics = computeMonthlyComparisonMetrics(trips, currentUserId, weeklyBudget, now);
 
     // Factual Insights
+    const allTimeTotalSpend = weeklyTotal(trips);
     const factualInsights = generateFactualInsights({
       actualSpent: personalWeekActualSpend,
       expectedBudgetUsed,
@@ -386,13 +472,15 @@ export default function Home() {
       sharedAvgCost,
       sharingSavingsVal,
       allTimeTotalSpend,
+      personalAllTimeSpend,
+      personalSharedAllTime,
+      personalSoloAllTime,
       busSavingsVal,
       busUsedPctVal,
       busSavedPctVal,
-      allTimeSoloSpend,
-      allTimeSharedSpend,
       soloBusUsedPct,
       sharedBusUsedPct,
+      monthlyMetrics,
       factualInsights,
       spendingTrend,
       dailySpendingSeries,
@@ -867,52 +955,64 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Saturday -> Friday Redesigned High-Fidelity Daily Spending Pulse */}
+              {/* Saturday -> Friday Clean Native Daily Spending Pulse */}
               <section className="daily-pulse-card">
                 <div className="daily-pulse-header">
                   <div>
                     <h4 className="daily-pulse-title">Daily Spending Pulse</h4>
-                    <span style={{ fontSize: "11px", color: "var(--muted)" }}>Interactive week pacing · Sat → Fri</span>
+                    <span style={{ fontSize: "11px", color: "var(--muted)" }}>Sat → Fri · Personal commute spend</span>
                   </div>
                   <span style={{ fontSize: "11px", fontFamily: "DM Mono, monospace", color: "var(--green)", fontWeight: 700 }}>
                     {money.format(analytics.expectedDailyBudget)}/day target
                   </span>
                 </div>
 
-                <div className="pulse-strip-grid">
-                  {analytics.spendingDays.map((day) => {
-                    const totalSpend = day.campusSpend + day.homeSpend;
-                    const maxScale = Math.max(analytics.dailyMaxSpend, analytics.expectedDailyBudget, 1);
-                    const campusPct = Math.min(100, (day.campusSpend / maxScale) * 100);
-                    const homePct = Math.min(100, (day.homeSpend / maxScale) * 100);
-                    const isSelected = selectedDayIso === day.isoDate;
-
+                <div className="daily-pulse-chart-wrap">
+                  {/* Daily Target Line */}
+                  {(() => {
+                    const maxScale = Math.max(analytics.dailyMaxSpend, analytics.expectedDailyBudget * 1.25, 1);
+                    const targetTopPct = 100 - (analytics.expectedDailyBudget / maxScale) * 100;
                     return (
-                      <button
-                        key={day.isoDate}
-                        type="button"
-                        className={`pulse-day-cell ${day.isToday ? "today" : ""} ${isSelected ? "selected" : ""}`}
-                        onClick={() => setSelectedDayIso(isSelected ? null : day.isoDate)}
-                        aria-label={`${day.dayFullName}: ${money.format(totalSpend)}`}
-                      >
-                        {day.isToday && <span className="pulse-today-pip" title="Today" />}
-                        <div className="pulse-cell-header">
-                          <span className="pulse-cell-day">{day.dayName}</span>
-                          <span className="pulse-cell-num">{day.dayNum}</span>
-                        </div>
-                        <div className="pulse-pill-track" title={`Morning: ${money.format(day.campusSpend)}, Evening: ${money.format(day.homeSpend)}`}>
-                          <div className="pulse-pill-campus" style={{ height: `${campusPct}%` }} />
-                          <div className="pulse-pill-home" style={{ height: `${homePct}%` }} />
-                        </div>
-                        <span className="pulse-cell-amount">
-                          {totalSpend > 0 ? Math.round(totalSpend) : "—"}
-                        </span>
-                      </button>
+                      <div className="daily-pulse-target-line" style={{ top: `${Math.max(12, Math.min(85, targetTopPct))}%` }}>
+                        <span className="daily-pulse-target-tag">Target {Math.round(analytics.expectedDailyBudget)}</span>
+                      </div>
                     );
-                  })}
+                  })()}
+
+                  <div className="daily-pulse-cols-grid">
+                    {analytics.spendingDays.map((day) => {
+                      const totalSpend = day.campusSpend + day.homeSpend;
+                      const maxScale = Math.max(analytics.dailyMaxSpend, analytics.expectedDailyBudget * 1.25, 1);
+                      const campusPct = Math.min(100, (day.campusSpend / maxScale) * 100);
+                      const homePct = Math.min(100, (day.homeSpend / maxScale) * 100);
+                      const isOver = totalSpend > analytics.expectedDailyBudget + 0.5;
+                      const isSelected = selectedDayIso === day.isoDate;
+
+                      return (
+                        <button
+                          key={day.isoDate}
+                          type="button"
+                          className={`daily-pulse-col-btn ${isSelected ? "selected" : ""}`}
+                          onClick={() => setSelectedDayIso(isSelected ? null : day.isoDate)}
+                        >
+                          <span className="daily-pulse-val-label" style={{ color: isOver ? "var(--red)" : "var(--ink)" }}>
+                            {totalSpend > 0 ? Math.round(totalSpend) : "—"}
+                          </span>
+                          <div className="daily-pulse-track">
+                            <div className="daily-pulse-fill-campus" style={{ height: `${campusPct}%` }} />
+                            <div className="daily-pulse-fill-home" style={{ height: `${homePct}%` }} />
+                            {isOver && <div className="daily-pulse-fill-over" style={{ height: "4px" }} />}
+                          </div>
+                          <span className={`daily-pulse-day-badge ${day.isToday ? "today" : ""}`}>
+                            {day.dayName}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                {/* Rich Day Inspector Box */}
+                {/* Inline Day Summary */}
                 {selectedDayIso && (() => {
                   const day = analytics.spendingDays.find((d) => d.isoDate === selectedDayIso);
                   if (!day) return null;
@@ -921,70 +1021,34 @@ export default function Home() {
                   const diff = totalSpend - analytics.expectedDailyBudget;
 
                   return (
-                    <div className="day-inspector-wrap">
-                      <div className="day-inspector-top">
-                        <div className="day-inspector-title">
-                          <span>{day.dayFullName}, {day.dateStr}</span>
-                          {day.isToday && <span style={{ fontSize: "11px", color: "var(--green)", fontWeight: 700 }}>• Today</span>}
+                    <div className="daily-pulse-inline-summary">
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div>
+                          <b>{day.dayFullName}, {day.dateStr}</b>
+                          {day.isToday && <span style={{ marginLeft: "6px", color: "var(--green)", fontWeight: 700 }}>• Today</span>}
                         </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span className={`day-inspector-tag ${day.ridesCount > 0 ? "college" : "rest"}`}>
-                            {day.ridesCount > 0 ? "College Day" : "Rest Day"}
-                          </span>
-                          <button
-                            type="button"
-                            style={{ border: 0, background: "none", color: "var(--muted)", fontSize: "16px", cursor: "pointer", padding: "0 4px" }}
-                            onClick={() => setSelectedDayIso(null)}
-                          >
-                            ×
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          style={{ border: 0, background: "none", color: "var(--muted)", fontSize: "16px", cursor: "pointer", padding: "0 4px" }}
+                          onClick={() => setSelectedDayIso(null)}
+                        >
+                          ×
+                        </button>
                       </div>
-
-                      <div className="day-inspector-metrics-row">
-                        <div className="day-inspector-metric-box">
-                          <span className="day-inspector-metric-label">Your Spend</span>
-                          <span className="day-inspector-metric-val">{money.format(totalSpend)}</span>
-                        </div>
-                        <div className="day-inspector-metric-box">
-                          <span className="day-inspector-metric-label">Daily Target</span>
-                          <span className="day-inspector-metric-val">{money.format(analytics.expectedDailyBudget)}</span>
-                        </div>
-                        <div className="day-inspector-metric-box">
-                          <span className="day-inspector-metric-label">Status</span>
-                          <span
-                            className="day-inspector-metric-val"
-                            style={{
-                              fontSize: "12px",
-                              color: diff > 5 ? "var(--red)" : diff < -5 ? "var(--green)" : "var(--ink)",
-                            }}
-                          >
-                            {totalSpend === 0 ? "No rides" : diff > 0 ? `+${money.format(diff)} over` : `${money.format(Math.abs(diff))} under`}
-                          </span>
-                        </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--ink)", fontWeight: 600 }}>
+                        <span>Spend: {money.format(totalSpend)} ({day.ridesCount} {day.ridesCount === 1 ? "ride" : "rides"})</span>
+                        <span style={{ color: diff > 5 ? "var(--red)" : diff < -5 ? "var(--green)" : "var(--muted)" }}>
+                          {totalSpend === 0 ? "Rest day" : diff > 0 ? `+${money.format(diff)} over target` : `${money.format(Math.abs(diff))} under target`}
+                        </span>
                       </div>
-
-                      {dayTrips.length > 0 ? (
-                        <div className="day-rides-mini-list">
-                          <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
-                            Rides on this day ({dayTrips.length})
-                          </span>
+                      {dayTrips.length > 0 && (
+                        <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "4px", borderTop: "1px solid #ede8dc", paddingTop: "6px" }}>
                           {dayTrips.map((t) => (
-                            <div key={t.id} className="day-ride-mini-item">
-                              <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                                <span>{t.direction === "campus" ? "🎓 Morning Campus" : "🏡 Evening Home"}</span>
-                                <span style={{ color: "var(--muted)", fontSize: "11px" }}>({t.trip_mode})</span>
-                              </div>
-                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
-                                <b>{money.format(t.amount)}</b>
-                                <span style={{ fontSize: "11px", color: "var(--muted)" }}>paid by {t.paid_by === currentUserId ? "you" : otherMember?.display_name || t.paid_by}</span>
-                              </div>
+                            <div key={t.id} style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)" }}>
+                              <span>{t.direction === "campus" ? "🎓 Campus" : "🏡 Home"} ({t.trip_mode})</span>
+                              <span><b>{money.format(t.amount)}</b> · paid by {t.paid_by === currentUserId ? "you" : otherMember?.display_name || t.paid_by}</span>
                             </div>
                           ))}
-                        </div>
-                      ) : (
-                        <div style={{ fontSize: "11px", color: "var(--muted)", fontStyle: "italic" }}>
-                          No commute logged for this day.
                         </div>
                       )}
                     </div>
@@ -992,38 +1056,38 @@ export default function Home() {
                 })()}
               </section>
 
-              {/* Bus Benchmark (EGP 42,000) */}
+              {/* Bus Benchmark (EGP 42,000) - Strictly Personal Commute */}
               <section className="bus-benchmark-wrap" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", boxShadow: "var(--shadow-sm)" }}>
                 <div className="bus-benchmark-hero">
                   <span style={{ fontSize: "11px", color: "var(--muted)" }}>University Bus Benchmark (EGP 42,000)</span>
                   <span className="bus-benchmark-num">{money.format(analytics.busSavingsVal)}</span>
-                  <small style={{ color: "var(--muted)", fontSize: "11px" }}>Saved so far vs taking the college bus pass</small>
+                  <small style={{ color: "var(--muted)", fontSize: "11px" }}>Saved so far vs your personal EGP 42,000 college bus pass</small>
                 </div>
                 <div className="bus-benchmark-meter">
-                  <div className="bus-meter-shared" style={{ width: `${analytics.sharedBusUsedPct}%` }} />
-                  <div className="bus-meter-solo" style={{ width: `${analytics.soloBusUsedPct}%` }} />
+                  <div className="bus-meter-shared" style={{ width: `${analytics.sharedBusUsedPct}%` }} title={`Shared: ${money.format(analytics.personalSharedAllTime)}`} />
+                  <div className="bus-meter-solo" style={{ width: `${analytics.soloBusUsedPct}%` }} title={`Solo: ${money.format(analytics.personalSoloAllTime)}`} />
                 </div>
                 <div className="bus-meter-labels">
-                  <span>{analytics.busUsedPctVal.toFixed(1)}% spent ({money.format(analytics.allTimeTotalSpend)})</span>
+                  <span>{analytics.busUsedPctVal.toFixed(1)}% spent ({money.format(analytics.personalAllTimeSpend)})</span>
                   <span>{analytics.busSavedPctVal.toFixed(1)}% remaining</span>
                 </div>
 
                 {/* Own and other's spending breakdown */}
                 <div className="bus-member-split-section">
-                  <span className="bus-member-split-title">Member Payments & Spending</span>
+                  <span className="bus-member-split-title">Member Payments & Personal Share</span>
                   <div className="bus-member-cards-grid">
                     <div className="bus-member-card">
                       <span className="bus-member-label">You ({currentName})</span>
-                      <span className="bus-member-val">{money.format(stats.paidByYou)}</span>
+                      <span className="bus-member-val">{money.format(analytics.personalAllTimeSpend)}</span>
                       <span className="bus-member-sub">
-                        Paid out of pocket · Personal: {money.format(stats.personalSpendByYou)}
+                        Half shared + own solo · Paid: {money.format(stats.paidByYou)}
                       </span>
                     </div>
                     <div className="bus-member-card">
                       <span className="bus-member-label">{otherMember?.display_name || "Co-pilot"}</span>
-                      <span className="bus-member-val">{money.format(stats.paidByOther)}</span>
+                      <span className="bus-member-val">{money.format(stats.personalSpendByOther)}</span>
                       <span className="bus-member-sub">
-                        Paid out of pocket · Personal: {money.format(stats.personalSpendByOther)}
+                        Half shared + own solo · Paid: {money.format(stats.paidByOther)}
                       </span>
                     </div>
                   </div>
@@ -1268,37 +1332,67 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* 3. MONTHLY PROJECTION & PERSONAL COMMUTE RUN RATE */}
+              {/* 3. MONTHLY PROJECTION: CURRENT VS EXPECTED VS BUDGET LIMIT */}
               <section className="monthly-runrate-card">
                 <div className="section-header-row" style={{ margin: 0 }}>
                   <h4 className="trend-chart-title">Monthly Commute Projection</h4>
-                  <span className="section-header-meta">Personal run rate</span>
+                  <span className="section-header-meta">Avg weekly × 4</span>
                 </div>
 
+                {/* 3 Comparison Cards: Current Monthly Spend vs Expected vs Budget Limit */}
+                <div className="monthly-compare-trio">
+                  <div className="monthly-compare-card highlight">
+                    <span className="monthly-compare-label">Current Month</span>
+                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.currentMonthSpend)}</strong>
+                    <span className="monthly-compare-sub">Personal spend</span>
+                  </div>
+                  <div className="monthly-compare-card">
+                    <span className="monthly-compare-label">Expected</span>
+                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.expectedMonthlySpend)}</strong>
+                    <span className="monthly-compare-sub">College days pacing</span>
+                  </div>
+                  <div className="monthly-compare-card">
+                    <span className="monthly-compare-label">Budget Limit</span>
+                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.monthlyBudgetLimit)}</strong>
+                    <span className="monthly-compare-sub">Weekly × 4</span>
+                  </div>
+                </div>
+
+                {/* Progress bar vs Monthly Budget Limit */}
+                <div style={{ display: "flex", flexDirection: "column", gap: "5px" }}>
+                  <div className="bus-member-progress-track">
+                    <div
+                      className="bus-member-progress-fill"
+                      style={{
+                        width: `${Math.min(100, analytics.monthlyMetrics.pctOfLimit)}%`,
+                        background: analytics.monthlyMetrics.pctOfLimit > 100 ? "var(--red)" : "var(--green)",
+                      }}
+                    />
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "var(--muted)", fontFamily: "DM Mono, monospace" }}>
+                    <span>{analytics.monthlyMetrics.pctOfLimit.toFixed(0)}% of limit</span>
+                    <span style={{ color: analytics.monthlyMetrics.diffFromLimit < 0 ? "var(--red)" : "var(--green)", fontWeight: 600 }}>
+                      {analytics.monthlyMetrics.diffFromLimit >= 0
+                        ? `${money.format(analytics.monthlyMetrics.diffFromLimit)} remaining`
+                        : `${money.format(Math.abs(analytics.monthlyMetrics.diffFromLimit))} over limit`}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Run Rate & Weekly Avg */}
                 <div className="monthly-runrate-hero">
                   <div className="monthly-runrate-hero-left">
-                    <span className="monthly-runrate-hero-label">Average Monthly Spending (Me Only)</span>
-                    <strong className="monthly-runrate-hero-val">{money.format(analytics.personalMonthlyAvg)}</strong>
-                    <span className="monthly-runrate-hero-sub">Half of shared rides + your solo rides only</span>
+                    <span className="monthly-runrate-hero-label">Weekly Avg → Monthly Projection (× 4)</span>
+                    <strong className="monthly-runrate-hero-val">{money.format(analytics.monthlyMetrics.averageMonthlySpend)}</strong>
+                    <span className="monthly-runrate-hero-sub">
+                      Based on {money.format(analytics.monthlyMetrics.averageWeeklySpend)}/wk personal average
+                    </span>
                   </div>
-                  <span className="monthly-pacing-tag">Personal Pace</span>
-                </div>
-
-                <div className="payer-split-grid">
-                  <div className="payer-split-box">
-                    <span className="payer-split-label">Monthly Target Budget</span>
-                    <strong className="payer-split-amount">{money.format(weeklyBudget * (52 / 12))}</strong>
-                    <span className="payer-split-pct">Based on {money.format(weeklyBudget)}/week</span>
-                  </div>
-                  <div className="payer-split-box">
-                    <span className="payer-split-label">Carpooled Savings</span>
-                    <strong className="payer-split-amount" style={{ color: "var(--green)" }}>+{money.format(analytics.sharingSavingsVal)}</strong>
-                    <span className="payer-split-pct">50% saved vs solo rides</span>
-                  </div>
+                  <span className="monthly-pacing-tag">4× Weekly</span>
                 </div>
 
                 {/* Fair Share Payment Balance */}
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "2px" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <span style={{ fontSize: "11px", fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
                       Payer Balance & Out of Pocket

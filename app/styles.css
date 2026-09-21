@@ -2508,6 +2508,231 @@ button {
 }
 
 /* ========================================================
+   CLEAN, NATIVE DAILY SPENDING PULSE
+   ======================================================== */
+.daily-pulse-card {
+  background: #ffffff;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: var(--shadow-sm);
+}
+
+.daily-pulse-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.daily-pulse-title {
+  font-size: 14px;
+  font-weight: 800;
+  color: var(--ink);
+  margin: 0;
+  letter-spacing: -0.3px;
+}
+
+.daily-pulse-chart-wrap {
+  position: relative;
+  width: 100%;
+  padding-top: 10px;
+}
+
+.daily-pulse-target-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  border-top: 1px dashed #c4beaf;
+  pointer-events: none;
+  z-index: 2;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.daily-pulse-target-tag {
+  font-size: 9px;
+  font-family: "DM Mono", monospace;
+  color: #71786e;
+  background: #ffffff;
+  padding: 0 4px;
+  margin-top: -8px;
+  font-weight: 700;
+}
+
+.daily-pulse-cols-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 6px;
+  align-items: flex-end;
+  height: 120px;
+  position: relative;
+  z-index: 3;
+}
+
+.daily-pulse-col-btn {
+  border: 0;
+  background: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  height: 100%;
+  cursor: pointer;
+  position: relative;
+  gap: 4px;
+}
+
+.daily-pulse-val-label {
+  font-size: 10px;
+  font-weight: 700;
+  font-family: "DM Mono", monospace;
+  color: var(--ink);
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.daily-pulse-track {
+  width: 100%;
+  max-width: 26px;
+  height: 72px;
+  background: #f0ede6;
+  border-radius: 6px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column-reverse;
+  position: relative;
+  border: 1px solid transparent;
+  transition: border-color 0.22s ease, transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
+}
+
+.daily-pulse-col-btn.selected .daily-pulse-track {
+  border-color: var(--green);
+  box-shadow: 0 0 0 2px rgba(45, 106, 79, 0.25);
+  transform: scale(1.08);
+}
+
+.daily-pulse-fill-campus {
+  background: var(--green);
+  width: 100%;
+  transition: height 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: barGrowUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.daily-pulse-fill-home {
+  background: #d97706;
+  width: 100%;
+  transition: height 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: barGrowUp 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.daily-pulse-fill-over {
+  background: #d62828;
+  width: 100%;
+  transition: height 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.daily-pulse-day-badge {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  font-family: "DM Mono", monospace;
+  text-transform: uppercase;
+  padding: 2px 4px;
+  border-radius: 4px;
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.daily-pulse-day-badge.today {
+  background: var(--green);
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.daily-pulse-inline-summary {
+  background: #faf8f2;
+  border: 1px solid #ede8dc;
+  border-radius: var(--radius-md);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+  animation: cardGlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* ========================================================
+   MONTHLY COMPARISON: CURRENT VS EXPECTED VS BUDGET LIMIT
+   ======================================================== */
+.monthly-compare-trio {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  width: 100%;
+}
+
+.monthly-compare-card {
+  background: #faf8f2;
+  border: 1px solid #ede9df;
+  border-radius: var(--radius-md);
+  padding: 10px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.monthly-compare-card.highlight {
+  background: var(--ink);
+  color: white;
+  border-color: var(--ink);
+}
+
+.monthly-compare-label {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  font-family: "DM Mono", monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.monthly-compare-card.highlight .monthly-compare-label {
+  color: #aeb4a8;
+}
+
+.monthly-compare-val {
+  font-size: 16px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.monthly-compare-card.highlight .monthly-compare-val {
+  color: var(--lime);
+}
+
+.monthly-compare-sub {
+  font-size: 9px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.monthly-compare-card.highlight .monthly-compare-sub {
+  color: #c0c6ba;
+}
+
+/* ========================================================
    GLOBAL FLUID SLOW MOTION & SPRING TRANSITIONS
    ======================================================== */
 button, input, select, .btn, .filter-chip, .nav-tab-btn, .trip-settle-btn, .daily-col-btn, .trip-card, .hero-action-btn, .sheet-submit-btn, .solo-scope-chip {
@@ -2518,8 +2743,9 @@ button, input, select, .btn, .filter-chip, .nav-tab-btn, .trip-settle-btn, .dail
               border-color 0.24s ease;
 }
 
-button:active, .btn:active, .filter-chip:active, .hero-action-btn:active, .sheet-submit-btn:active {
-  transform: scale(0.96);
+button:active, .btn:active, .filter-chip:active, .hero-action-btn:active, .sheet-submit-btn:active, .nav-tab-btn:active, .solo-scope-chip:active {
+  transform: scale(0.92) translateY(1px) !important;
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
 }
 
 .tab-content {
@@ -2527,19 +2753,55 @@ button:active, .btn:active, .filter-chip:active, .hero-action-btn:active, .sheet
   display: flex;
   flex-direction: column;
   gap: 18px;
-  animation: tabFadeSlide 0.38s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: tabSlideGlide 0.36s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   will-change: transform, opacity;
 }
 
-@keyframes cardAppear {
+@keyframes tabSlideGlide {
   0% {
     opacity: 0;
-    transform: translateY(12px);
+    transform: translateY(18px) scale(0.988);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.tab-content > section, .tab-content > .analytics-summary-trio, .tab-content > .balance-hero-card, .tab-content > .rides-settlement-strip {
+  animation: cardGlideUp 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.tab-content > *:nth-child(1) { animation-delay: 0.03s; }
+.tab-content > *:nth-child(2) { animation-delay: 0.07s; }
+.tab-content > *:nth-child(3) { animation-delay: 0.11s; }
+.tab-content > *:nth-child(4) { animation-delay: 0.15s; }
+.tab-content > *:nth-child(5) { animation-delay: 0.19s; }
+.tab-content > *:nth-child(6) { animation-delay: 0.23s; }
+
+@keyframes cardGlideUp {
+  0% {
+    opacity: 0;
+    transform: translateY(16px);
   }
   100% {
     opacity: 1;
     transform: translateY(0);
   }
+}
+
+@keyframes barGrowUp {
+  0% {
+    transform: scaleY(0);
+    opacity: 0.2;
+  }
+  100% {
+    transform: scaleY(1);
+    opacity: 1;
+  }
+}
+
+.budget-progress-fill, .bus-meter-shared, .bus-meter-solo, .bus-member-progress-fill, .payer-bar-fill {
+  transition: width 0.75s cubic-bezier(0.16, 1, 0.3, 1) !important;
 }
 
 
