@@ -406,15 +406,16 @@ export default function Home() {
     const homeSharedCount = homeTrips.filter((t) => t.trip_mode === "shared").length;
     const homeSoloCount = filterSoloTrips(homeTrips, soloScope, currentUserId).length;
 
-    // EGP 42,000 Bus Benchmark - strictly personal commute (half of shared + own solo)
+    // EGP 42,000 Bus Benchmark - TOTAL spending shared and solo of everyone vs bus (42,000)
+    const totalGroupSpend = trips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const allTripsSharedTotal = trips.filter((t) => t.trip_mode === "shared").reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const allTripsSoloTotal = trips.filter((t) => t.trip_mode === "solo").reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
+    const busSavingsVal = busBenchmarkSavings(totalGroupSpend, BUS_BENCHMARK);
+    const busUsedPctVal = busBenchmarkPercentageUsed(totalGroupSpend, BUS_BENCHMARK);
+    const busSavedPctVal = busBenchmarkPercentageSaved(totalGroupSpend, BUS_BENCHMARK);
+    const sharedBusUsedPct = (allTripsSharedTotal / BUS_BENCHMARK) * 100;
+    const soloBusUsedPct = (allTripsSoloTotal / BUS_BENCHMARK) * 100;
     const personalAllTimeSpend = personalTotal(trips, currentUserId);
-    const busSavingsVal = busBenchmarkSavings(personalAllTimeSpend, BUS_BENCHMARK);
-    const busUsedPctVal = busBenchmarkPercentageUsed(personalAllTimeSpend, BUS_BENCHMARK);
-    const busSavedPctVal = busBenchmarkPercentageSaved(personalAllTimeSpend, BUS_BENCHMARK);
-    const personalSharedAllTime = trips.filter((t) => t.trip_mode === "shared").reduce((sum, t) => sum + t.amount / 2, 0);
-    const personalSoloAllTime = trips.filter((t) => t.trip_mode === "solo" && t.solo_by === currentUserId).reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const soloBusUsedPct = busBenchmarkPercentageUsed(personalSoloAllTime, BUS_BENCHMARK);
-    const sharedBusUsedPct = busBenchmarkPercentageUsed(personalSharedAllTime, BUS_BENCHMARK);
 
     // Monthly Comparison Metrics: current vs expected vs budget limit (weekly * 4)
     const monthlyMetrics = computeMonthlyComparisonMetrics(trips, currentUserId, weeklyBudget, now);
@@ -463,9 +464,10 @@ export default function Home() {
       sharedAvgCost,
       sharingSavingsVal,
       allTimeTotalSpend,
+      totalGroupSpend,
+      allTripsSharedTotal,
+      allTripsSoloTotal,
       personalAllTimeSpend,
-      personalSharedAllTime,
-      personalSoloAllTime,
       busSavingsVal,
       busUsedPctVal,
       busSavedPctVal,
@@ -1013,51 +1015,45 @@ export default function Home() {
                 </div>
               </section>
 
-              {/* Bus Benchmark (EGP 42,000) - Strictly Personal Commute */}
+              {/* Bus Benchmark (EGP 42,000) - TOTAL Shared + Solo of Everyone vs Bus */}
               <section className="bus-benchmark-wrap" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", boxShadow: "var(--shadow-sm)" }}>
                 <div className="bus-benchmark-hero">
                   <span style={{ fontSize: "11px", color: "var(--muted)" }}>University Bus Benchmark (EGP 42,000)</span>
                   <span className="bus-benchmark-num">{money.format(analytics.busSavingsVal)}</span>
-                  <small style={{ color: "var(--muted)", fontSize: "11px" }}>Saved so far vs your personal EGP 42,000 college bus pass</small>
+                  <small style={{ color: "var(--muted)", fontSize: "11px" }}>
+                    {analytics.busSavingsVal >= 0
+                      ? `Saved so far vs EGP 42,000 bus pass (Total spend: ${money.format(analytics.totalGroupSpend)})`
+                      : `${money.format(Math.abs(analytics.busSavingsVal))} over EGP 42,000 bus pass (Total spend: ${money.format(analytics.totalGroupSpend)})`}
+                  </small>
                 </div>
                 <div className="bus-benchmark-meter">
-                  <div className="bus-meter-shared" style={{ width: `${analytics.sharedBusUsedPct}%` }} title={`Shared: ${money.format(analytics.personalSharedAllTime)}`} />
-                  <div className="bus-meter-solo" style={{ width: `${analytics.soloBusUsedPct}%` }} title={`Solo: ${money.format(analytics.personalSoloAllTime)}`} />
+                  <div className="bus-meter-shared" style={{ width: `${Math.min(100, analytics.sharedBusUsedPct)}%` }} title={`Shared: ${money.format(analytics.allTripsSharedTotal)}`} />
+                  <div className="bus-meter-solo" style={{ width: `${Math.min(100 - Math.min(100, analytics.sharedBusUsedPct), analytics.soloBusUsedPct)}%` }} title={`Solo: ${money.format(analytics.allTripsSoloTotal)}`} />
                 </div>
                 <div className="bus-meter-labels">
-                  <span>{analytics.busUsedPctVal.toFixed(1)}% spent ({money.format(analytics.personalAllTimeSpend)})</span>
+                  <span>{analytics.busUsedPctVal.toFixed(1)}% spent ({money.format(analytics.totalGroupSpend)} total shared + solo)</span>
                   <span>{analytics.busSavedPctVal.toFixed(1)}% remaining</span>
                 </div>
 
-                {/* Own and other's spending breakdown */}
+                {/* Own and other's spending breakdown with percentage of 42,000 */}
                 <div className="bus-member-split-section">
                   <span className="bus-member-split-title">Member Payments & Personal Share</span>
                   <div className="bus-member-cards-grid">
                     <div className="bus-member-card">
                       <span className="bus-member-label">You ({currentName})</span>
                       <span className="bus-member-val">{money.format(analytics.personalAllTimeSpend)}</span>
+                      <span className="bus-member-sub" style={{ fontFamily: "DM Mono, monospace", fontWeight: 600 }}>
+                        {((analytics.personalAllTimeSpend / BUS_BENCHMARK) * 100).toFixed(1)}% of EGP 42,000
+                      </span>
                     </div>
                     <div className="bus-member-card">
                       <span className="bus-member-label">{otherMember?.display_name || "Co-pilot"}</span>
                       <span className="bus-member-val">{money.format(stats.personalSpendByOther)}</span>
+                      <span className="bus-member-sub" style={{ fontFamily: "DM Mono, monospace", fontWeight: 600 }}>
+                        {((stats.personalSpendByOther / BUS_BENCHMARK) * 100).toFixed(1)}% of EGP 42,000
+                      </span>
                     </div>
                   </div>
-                  {stats.total > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: "4px", marginTop: "2px" }}>
-                      <div className="bus-member-progress-track">
-                        <div
-                          className="bus-member-progress-fill"
-                          style={{
-                            width: `${(stats.paidByYou / stats.total) * 100}%`,
-                          }}
-                        />
-                      </div>
-                      <div className="bus-member-progress-labels">
-                        <span>You: {((stats.paidByYou / stats.total) * 100).toFixed(0)}%</span>
-                        <span>{otherMember?.display_name || "Co-pilot"}: {((stats.paidByOther / stats.total) * 100).toFixed(0)}%</span>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </section>
             </main>
