@@ -950,7 +950,6 @@ export default function Home() {
               <section className="monthly-runrate-card">
                 <div className="section-header-row" style={{ margin: 0 }}>
                   <h4 className="trend-chart-title">Monthly Commute Projection</h4>
-                  <span className="section-header-meta">Logged days avg × 4 × 4</span>
                 </div>
 
                 {/* Prominent Average Spending Number Display */}
@@ -964,30 +963,19 @@ export default function Home() {
                         : "No logged days yet"}
                     </span>
                   </div>
-                  <span className="monthly-pacing-tag">Avg × 16</span>
-                </div>
-
-                {/* 3 Comparison Cards: Current Monthly Spend vs Expected vs Budget Limit */}
-                <div className="monthly-compare-trio">
-                  <div className="monthly-compare-card highlight">
-                    <span className="monthly-compare-label">Current Month</span>
-                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.currentMonthSpend)}</strong>
-                    <span className="monthly-compare-sub">Personal spend</span>
-                  </div>
-                  <div className="monthly-compare-card">
-                    <span className="monthly-compare-label">Expected Avg</span>
-                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.expectedMonthlySpend)}</strong>
-                    <span className="monthly-compare-sub">Logged days × 16</span>
-                  </div>
-                  <div className="monthly-compare-card">
-                    <span className="monthly-compare-label">Budget Limit</span>
-                    <strong className="monthly-compare-val">{money.format(analytics.monthlyMetrics.monthlyBudgetLimit)}</strong>
-                    <span className="monthly-compare-sub">Weekly × 4</span>
-                  </div>
                 </div>
 
                 {/* Progress Bar to Budget Limit with Average Spending Dotted Line Marker */}
                 <div className="monthly-progress-wrap">
+                  {/* Status text above bar to left */}
+                  <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center" }}>
+                    <span style={{ fontSize: "11px", fontWeight: 700, fontFamily: "DM Mono, monospace", color: analytics.monthlyMetrics.statusColor === "red" ? "var(--red)" : analytics.monthlyMetrics.statusColor === "yellow" ? "#d97706" : "var(--green)" }}>
+                      {analytics.monthlyMetrics.statusColor === "green" && "● Within budget"}
+                      {analytics.monthlyMetrics.statusColor === "yellow" && "▲ Above expected avg"}
+                      {analytics.monthlyMetrics.statusColor === "red" && "■ Near / over limit"}
+                    </span>
+                  </div>
+
                   <div className="monthly-progress-track">
                     {/* Current spending fill with dynamic color: green -> yellow after expected -> red near budget */}
                     <div
@@ -1013,15 +1001,10 @@ export default function Home() {
                     )}
                   </div>
 
-                  {/* Progress Bar Context Labels */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--muted)", fontFamily: "DM Mono, monospace", marginTop: "2px" }}>
+                  {/* Below bar: Current spend to left, Budget limit to right */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--muted)", fontFamily: "DM Mono, monospace", marginTop: "4px" }}>
                     <span>
-                      Current: <b style={{ color: "var(--ink)" }}>{money.format(analytics.monthlyMetrics.currentMonthSpend)}</b> ({analytics.monthlyMetrics.pctOfLimit.toFixed(0)}%)
-                    </span>
-                    <span style={{ fontWeight: 700, color: analytics.monthlyMetrics.statusColor === "red" ? "var(--red)" : analytics.monthlyMetrics.statusColor === "yellow" ? "#d97706" : "var(--green)" }}>
-                      {analytics.monthlyMetrics.statusColor === "green" && "● Within expected avg"}
-                      {analytics.monthlyMetrics.statusColor === "yellow" && "▲ Above expected avg"}
-                      {analytics.monthlyMetrics.statusColor === "red" && "■ Near / over limit"}
+                      Current: <b style={{ color: "var(--ink)" }}>{money.format(analytics.monthlyMetrics.currentMonthSpend)}</b>
                     </span>
                     <span>
                       Limit: <b style={{ color: "var(--ink)" }}>{money.format(analytics.monthlyMetrics.monthlyBudgetLimit)}</b>
@@ -1053,16 +1036,10 @@ export default function Home() {
                     <div className="bus-member-card">
                       <span className="bus-member-label">You ({currentName})</span>
                       <span className="bus-member-val">{money.format(analytics.personalAllTimeSpend)}</span>
-                      <span className="bus-member-sub">
-                        Half shared + own solo · Paid: {money.format(stats.paidByYou)}
-                      </span>
                     </div>
                     <div className="bus-member-card">
                       <span className="bus-member-label">{otherMember?.display_name || "Co-pilot"}</span>
                       <span className="bus-member-val">{money.format(stats.personalSpendByOther)}</span>
-                      <span className="bus-member-sub">
-                        Half shared + own solo · Paid: {money.format(stats.paidByOther)}
-                      </span>
                     </div>
                   </div>
                   {stats.total > 0 && (

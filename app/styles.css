@@ -896,10 +896,10 @@ button {
 }
 
 .matrix-quadrant-spend {
-  font-size: 18px;
+  font-size: 14.5px;
   font-weight: 700;
   color: var(--ink);
-  letter-spacing: -0.6px;
+  letter-spacing: -0.4px;
 }
 
 .matrix-quadrant-meta {
@@ -1289,7 +1289,7 @@ button {
 .analytics-summary-trio {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
   width: 100%;
 }
 
@@ -1297,10 +1297,10 @@ button {
   background: var(--cream);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  padding: 12px 10px;
+  padding: 8px 6px;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 2px;
   min-width: 0;
   overflow: hidden;
 }
@@ -1313,11 +1313,11 @@ button {
 
 .trio-label {
   font-family: "DM Mono", monospace;
-  font-size: 9px;
+  font-size: 8px;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.02em;
   color: var(--muted);
-  font-weight: 600;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1327,21 +1327,22 @@ button {
 }
 
 .trio-value {
-  font-size: 16px;
+  font-size: 12.5px;
   font-weight: 700;
-  letter-spacing: -0.6px;
+  letter-spacing: -0.3px;
   color: var(--ink);
   margin-top: auto;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  line-height: 1.25;
 }
 .trio-card.primary-trio .trio-value {
   color: var(--lime);
 }
 
 .trio-sub {
-  font-size: 10px;
+  font-size: 8.5px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1349,6 +1350,12 @@ button {
 }
 .trio-card.primary-trio .trio-sub {
   color: #c0c6ba;
+}
+
+@media (max-width: 375px) {
+  .trio-value {
+    font-size: 11.5px;
+  }
 }
 
 /* ========================================================
@@ -1970,9 +1977,9 @@ button {
 }
 
 .commute-route-spend {
-  font-size: 17px;
+  font-size: 14px;
   font-weight: 800;
-  letter-spacing: -0.5px;
+  letter-spacing: -0.4px;
   color: var(--ink);
   margin-top: 1px;
   white-space: nowrap;
