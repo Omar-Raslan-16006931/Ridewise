@@ -58,12 +58,12 @@ export default function Home() {
       return;
     }
     setUser(sessionUser);
-    void loadWorkspace(sessionUser.id);
+    void loadWorkspace(sessionUser.id, true);
   }
 
-  async function loadWorkspace(userId: string) {
+  async function loadWorkspace(userId: string, showLoading = false) {
     if (!supabase) return;
-    setLoading(true);
+    if (showLoading) setLoading(true);
     const membership = await supabase.from("ride_group_members").select("group_id").eq("user_id", userId).limit(1).maybeSingle();
     if (membership.error || !membership.data) {
       setGroup(null);
@@ -181,52 +181,58 @@ export default function Home() {
       ride_at: new Date(rideAt).toISOString(),
       notes: notes || null,
     };
-    if (editingTrip) {
-      if (supabase && user) {
-        const result = await supabase.from("ride_trips").update(tripValues).eq("id", editingTrip.id);
-        if (result.error) return setNotice(result.error.message);
-        await loadWorkspace(user.id);
-      } else {
-        setTrips((existing) => existing.map((trip) => trip.id === editingTrip.id ? { ...trip, ...tripValues } : trip));
-      }
-      setNotice("Trip details updated.");
-    } else {
-      const newTrip = { id: crypto.randomUUID(), ...tripValues, settled_at: null, settled_by: null };
-      if (supabase && user) {
-        const result = await supabase.from("ride_trips").insert({ ...newTrip, group_id: group.id, created_by: user.id });
-        if (result.error) return setNotice(result.error.message);
-        await loadWorkspace(user.id);
-      } else {
-        setTrips((existing) => [newTrip, ...existing]);
-      }
-      setNotice("Trip saved. The split is ready.");
-    }
+    const tripBeingEdited = editingTrip;
     setModal(null);
     setEditingTrip(null);
+
+    if (tripBeingEdited) {
+      setTrips((existing) => existing.map((trip) => trip.id === tripBeingEdited.id ? { ...trip, ...tripValues } : trip));
+      setNotice("Trip details updated.");
+      if (supabase && user) {
+        const result = await supabase.from("ride_trips").update(tripValues).eq("id", tripBeingEdited.id);
+        if (result.error) {
+          setNotice(result.error.message);
+        }
+        await loadWorkspace(user.id, false);
+      }
+    } else {
+      const newTrip = { id: crypto.randomUUID(), ...tripValues, settled_at: null, settled_by: null };
+      setTrips((existing) => [newTrip, ...existing]);
+      setNotice("Trip saved. The split is ready.");
+      if (supabase && user) {
+        const result = await supabase.from("ride_trips").insert({ ...newTrip, group_id: group.id, created_by: user.id });
+        if (result.error) {
+          setNotice(result.error.message);
+        }
+        await loadWorkspace(user.id, false);
+      }
+    }
   }
 
   async function settleTrip(trip: Trip, paidByMemberId?: string) {
     const settledAt = new Date().toISOString();
+    setTrips((existing) => existing.map((item) => item.id === trip.id ? { ...item, settled_at: settledAt, settled_by: currentUserId } : item));
+    setNotice("That half is marked paid.");
     if (supabase && user) {
       const result = await supabase.rpc("settle_ride_trip", { target_trip_id: trip.id, settlement_note: null, settlement_paid_by: paidByMemberId ?? currentUserId });
-      if (result.error) return setNotice(result.error.message);
-      await loadWorkspace(user.id);
-    } else {
-      setTrips((existing) => existing.map((item) => item.id === trip.id ? { ...item, settled_at: settledAt, settled_by: currentUserId } : item));
+      if (result.error) {
+        setNotice(result.error.message);
+      }
+      await loadWorkspace(user.id, false);
     }
-    setNotice("That half is marked paid.");
   }
 
   async function deleteTrip(trip: Trip) {
     if (!window.confirm("Delete this trip? This cannot be undone.")) return;
+    setTrips((existing) => existing.filter((item) => item.id !== trip.id));
+    setNotice("Trip deleted.");
     if (supabase && user) {
       const result = await supabase.from("ride_trips").delete().eq("id", trip.id);
-      if (result.error) return setNotice(result.error.message);
-      await loadWorkspace(user.id);
-    } else {
-      setTrips((existing) => existing.filter((item) => item.id !== trip.id));
+      if (result.error) {
+        setNotice(result.error.message);
+      }
+      await loadWorkspace(user.id, false);
     }
-    setNotice("Trip deleted.");
   }
 
   async function registerPasskey() {
@@ -372,9 +378,11 @@ function ModalWindow({ modal, close, members, group, user, editingTrip, supabase
   const now = new Date();
   const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
   const tripDate = editingTrip ? new Date(new Date(editingTrip.ride_at).getTime() - new Date(editingTrip.ride_at).getTimezoneOffset() * 60_000).toISOString().slice(0, 16) : localTime;
+  const [tripMode, setTripMode] = useState<Trip["trip_mode"]>(editingTrip?.trip_mode ?? "shared");
+
   return <div className="modal-backdrop" role="presentation" onMouseDown={close}><section className="modal" role="dialog" aria-modal="true" onMouseDown={(event) => event.stopPropagation()}>
     <button className="modal-close" aria-label="Close" onClick={close}>×</button>
-    {(modal === "add" || modal === "edit") && <><div className="eyebrow">{editingTrip ? "Edit Uber ride" : "New Uber ride"}</div><h2>{editingTrip ? "Update the details." : "Add the details."}</h2><p className="modal-copy">Track shared rides, solo rides, and every total.</p><form onSubmit={onAdd} className="form-stack"><label>Ride cost <div className="amount-field"><span>EGP</span><input name="amount" type="number" min="1" step="0.01" autoFocus required placeholder="0" defaultValue={editingTrip?.amount} /></div></label><div className="form-columns"><label>Direction<ChoiceButtons name="direction" value={editingTrip?.direction ?? "campus"} options={[{ value: "campus", label: "To campus" }, { value: "home", label: "Back home" }]} /></label><label>Trip type<ChoiceButtons name="tripMode" value={editingTrip?.trip_mode ?? "shared"} options={[{ value: "shared", label: "Shared" }, { value: "solo", label: "Solo" }]} /></label></div><div className="form-columns"><label>Paid by<ChoiceButtons name="paidBy" value={editingTrip?.paid_by ?? user?.id ?? "omar"} options={members.map((member) => ({ value: member.user_id, label: member.display_name }))} /></label>{(editingTrip?.trip_mode === "solo" || !editingTrip) && <label>Solo rider<ChoiceButtons name="soloBy" value={editingTrip?.solo_by ?? user?.id ?? "omar"} options={members.map((member) => ({ value: member.user_id, label: member.display_name }))} /></label>}</div><label>When<input name="rideAt" type="datetime-local" required defaultValue={tripDate} /></label><label>Note <input name="notes" maxLength={280} placeholder="Optional" defaultValue={editingTrip?.notes ?? ""} /></label><button className="primary full" type="submit">{editingTrip ? "Save changes" : "Save trip"}</button></form></>}
+    {(modal === "add" || modal === "edit") && <><div className="eyebrow">{editingTrip ? "Edit Uber ride" : "New Uber ride"}</div><h2>{editingTrip ? "Update the details." : "Add the details."}</h2><p className="modal-copy">Track shared rides, solo rides, and every total.</p><form onSubmit={onAdd} className="form-stack"><label>Ride cost <div className="amount-field"><span>EGP</span><input name="amount" type="number" inputMode="decimal" pattern="[0-9]*[.,]?[0-9]*" min="1" step="0.01" autoFocus required placeholder="0" defaultValue={editingTrip?.amount} /></div></label><div className="form-columns"><label>Direction<ChoiceButtons name="direction" value={editingTrip?.direction ?? "campus"} options={[{ value: "campus", label: "To campus" }, { value: "home", label: "Back home" }]} /></label><label>Trip type<ChoiceButtons name="tripMode" value={tripMode} onChange={(val) => setTripMode(val as Trip["trip_mode"])} options={[{ value: "shared", label: "Shared" }, { value: "solo", label: "Solo" }]} /></label></div><div className={`form-columns ${tripMode === "solo" ? "two-col" : "single-col"}`}><label>Paid by<ChoiceButtons name="paidBy" value={editingTrip?.paid_by ?? user?.id ?? "omar"} options={members.map((member) => ({ value: member.user_id, label: member.display_name }))} /></label>{tripMode === "solo" && <label>Solo rider<ChoiceButtons name="soloBy" value={editingTrip?.solo_by ?? user?.id ?? "omar"} options={members.map((member) => ({ value: member.user_id, label: member.display_name }))} /></label>}</div><label>When<input name="rideAt" type="datetime-local" required defaultValue={tripDate} /></label><label>Note <input name="notes" maxLength={280} placeholder="Optional" defaultValue={editingTrip?.notes ?? ""} /></label><button className="primary full" type="submit">{editingTrip ? "Save changes" : "Save trip"}</button></form></>}
     {modal === "sign-in" && <><div className="eyebrow">Private Ridewise space</div><h2>Sign in with Google.</h2><p className="modal-copy">Ridewise is restricted to Omar and Khaled. Use the approved Google account to continue.</p><button className="primary full" onClick={() => void onSignIn()}>Continue with Google</button></>}
     {modal === "create-space" && <><div className="eyebrow">First things first</div><h2>Make your shared space.</h2><p className="modal-copy">You’ll get an invite code to send Khaled when it’s ready.</p><form className="form-stack" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void onCreate(String(data.get("space")), String(data.get("name"))); }}><label>Space name<input name="space" autoFocus required defaultValue="Omar + Khaled" /></label><label>Your name<input name="name" required defaultValue={user?.email?.split("@")[0] ?? ""} /></label><button className="primary full" type="submit">Create space</button></form></>}
     {modal === "join-space" && <><div className="eyebrow">Your friend invited you</div><h2>Join the ride ledger.</h2><form className="form-stack" onSubmit={(event) => { event.preventDefault(); const data = new FormData(event.currentTarget); void onJoin(String(data.get("code")), String(data.get("name"))); }}><label>Invite code<input name="code" autoFocus required placeholder="RIDE2026" /></label><label>Your name<input name="name" required defaultValue={user?.email?.split("@")[0] ?? ""} /></label><button className="primary full" type="submit">Join shared space</button></form></>}
@@ -382,7 +390,10 @@ function ModalWindow({ modal, close, members, group, user, editingTrip, supabase
   </section></div>;
 }
 
-function ChoiceButtons({ name, value, options }: { name: string; value: string; options: { value: string; label: string }[] }) {
+function ChoiceButtons({ name, value, options, onChange }: { name: string; value: string; options: { value: string; label: string }[]; onChange?: (value: string) => void }) {
   const [selected, setSelected] = useState(value);
-  return <div className="choice-buttons"><input type="hidden" name={name} value={selected} />{options.map((option) => <button className={selected === option.value ? "choice-button active" : "choice-button"} key={option.value} type="button" onClick={() => setSelected(option.value)}>{option.label}</button>)}</div>;
+  useEffect(() => {
+    setSelected(value);
+  }, [value]);
+  return <div className="choice-buttons"><input type="hidden" name={name} value={selected} />{options.map((option) => <button className={selected === option.value ? "choice-button active" : "choice-button"} key={option.value} type="button" onClick={() => { setSelected(option.value); onChange?.(option.value); }}>{option.label}</button>)}</div>;
 }
