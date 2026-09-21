@@ -16,6 +16,9 @@ import {
   budgetPercentage,
   soloTotal,
   sharedTotal,
+  personalTotal,
+  personalCollegeDaysUsed,
+  memberTripSpend,
   busBenchmarkSavings,
   busBenchmarkPercentageUsed,
   busBenchmarkPercentageSaved,
@@ -226,19 +229,20 @@ export default function Home() {
     const totalRides = horizonTrips.length;
     const avgRideCost = totalRides > 0 ? totalSpend / totalRides : 0;
 
-    // 4-Day Budget Calculations for the active week
+    // 4-Day Budget Calculations: PER PERSON (half of shared and own solo only)
     const currentWeekTrips = trips.filter((t) => {
       const d = new Date(t.ride_at);
       return d >= weekStart && d <= weekEnd;
     });
     const weekActualSpend = weeklyTotal(currentWeekTrips);
+    const personalWeekActualSpend = personalTotal(currentWeekTrips, currentUserId);
     const expectedDailyBudget = dailyBudget(weeklyBudget, EXPECTED_COLLEGE_DAYS);
-    const weekCollegeDays = collegeDaysUsed(currentWeekTrips);
-    const completedDaysCapped = Math.min(EXPECTED_COLLEGE_DAYS, weekCollegeDays);
+    const personalWeekCollegeDays = personalCollegeDaysUsed(currentWeekTrips, currentUserId);
+    const completedDaysCapped = Math.min(EXPECTED_COLLEGE_DAYS, personalWeekCollegeDays);
     const expectedBudgetUsed = completedDaysCapped * expectedDailyBudget;
-    const budgetDiff = budgetDifference(weekActualSpend, expectedBudgetUsed);
-    const budgetPct = budgetPercentage(weekActualSpend, expectedBudgetUsed);
-    const remainBudget = remainingBudget(weeklyBudget, weekActualSpend);
+    const budgetDiff = budgetDifference(personalWeekActualSpend, expectedBudgetUsed);
+    const budgetPct = budgetPercentage(personalWeekActualSpend, expectedBudgetUsed);
+    const remainBudget = remainingBudget(weeklyBudget, personalWeekActualSpend);
     const remainCollegeDays = Math.max(0, EXPECTED_COLLEGE_DAYS - completedDaysCapped);
     const remainBudgetPerDay = remainingBudgetPerCollegeDay(remainBudget, completedDaysCapped, EXPECTED_COLLEGE_DAYS);
 
@@ -249,12 +253,13 @@ export default function Home() {
       else budgetStatus = "on";
     }
 
-    // Saturday -> Friday Day-by-Day Breakdown
+    // Saturday -> Friday Personal Day-by-Day Breakdown
     const { days: spendingDays, maxSpend: dailyMaxSpend } = computeSpendingByDay(
       trips,
       weekStart,
       expectedDailyBudget,
-      todayIso
+      todayIso,
+      currentUserId
     );
 
     // 2x2 Matrix Breakdown
@@ -282,10 +287,10 @@ export default function Home() {
 
     // Factual Insights
     const factualInsights = generateFactualInsights({
-      actualSpent: weekActualSpend,
+      actualSpent: personalWeekActualSpend,
       expectedBudgetUsed,
       weeklyBudget,
-      usedDays: weekCollegeDays,
+      usedDays: personalWeekCollegeDays,
       days: spendingDays,
       allTrips: trips,
       totalAllTimeSpend: allTimeTotalSpend,
@@ -302,7 +307,8 @@ export default function Home() {
       weeklyBudget,
       expectedDailyBudget,
       weekActualSpend,
-      weekCollegeDays,
+      personalWeekActualSpend,
+      personalWeekCollegeDays,
       completedDaysCapped,
       expectedBudgetUsed,
       budgetDiff,
@@ -331,7 +337,7 @@ export default function Home() {
       sharedBusUsedPct,
       factualInsights,
     };
-  }, [trips, timeHorizon, weekOffset, weeklyBudget]);
+  }, [trips, timeHorizon, weekOffset, weeklyBudget, currentUserId]);
 
   async function saveTrip(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -705,15 +711,34 @@ export default function Home() {
                 ))}
               </div>
 
-              {/* Hero 4-Day Budget Card */}
+              {/* Trio KPI Cards: Total Spent (Shared + Solo), Shared Only, Solo Only */}
+              <div className="analytics-summary-trio">
+                <div className="trio-card primary-trio">
+                  <span className="trio-label">Total Spent</span>
+                  <strong className="trio-value">{money.format(analytics.totalSpend)}</strong>
+                  <small className="trio-sub">Shared + Solo ({analytics.totalRides} {analytics.totalRides === 1 ? "ride" : "rides"})</small>
+                </div>
+                <div className="trio-card">
+                  <span className="trio-label">Shared Only</span>
+                  <strong className="trio-value">{money.format(analytics.sharedSpendVal)}</strong>
+                  <small className="trio-sub">{analytics.sharedRidesCount} {analytics.sharedRidesCount === 1 ? "ride" : "rides"}</small>
+                </div>
+                <div className="trio-card">
+                  <span className="trio-label">Solo Only</span>
+                  <strong className="trio-value">{money.format(analytics.soloSpendVal)}</strong>
+                  <small className="trio-sub">{analytics.soloRidesCount} {analytics.soloRidesCount === 1 ? "ride" : "rides"}</small>
+                </div>
+              </div>
+
+              {/* Hero 4-Day Budget Card: Per Person (half of shared + own solo only) */}
               <section className="budget-hero-card">
                 <div className="budget-hero-top">
                   <div className="budget-hero-title-wrap">
-                    <span className="budget-hero-eyebrow">4-Day College Transportation</span>
+                    <span className="budget-hero-eyebrow">Personal Budget · 4 College Days ({currentName})</span>
                     <h3 className="budget-hero-title">
-                      {money.format(analytics.weekActualSpend)}{" "}
-                      <span style={{ fontSize: "14px", fontWeight: 400, color: "var(--muted)" }}>
-                        spent
+                      {money.format(analytics.personalWeekActualSpend)}{" "}
+                      <span style={{ fontSize: "13px", fontWeight: 400, color: "var(--muted)" }}>
+                        your share
                       </span>
                     </h3>
                   </div>
@@ -723,6 +748,9 @@ export default function Home() {
                     {analytics.budgetStatus === "on" && "On track"}
                   </span>
                 </div>
+                <p style={{ margin: "-8px 0 0", fontSize: "11px", color: "var(--muted)", lineHeight: 1.35 }}>
+                  Per-person allowance · 50% of shared rides + your own solo rides only.
+                </p>
 
                 <div className="budget-hero-stats">
                   <div className="budget-stat-block">
@@ -744,14 +772,14 @@ export default function Home() {
                 <div className="budget-progress-wrap">
                   <div className="budget-progress-bar">
                     <div
-                      className={`budget-progress-fill ${analytics.weekActualSpend > analytics.weeklyBudget ? "over" : ""}`}
+                      className={`budget-progress-fill ${analytics.personalWeekActualSpend > analytics.weeklyBudget ? "over" : ""}`}
                       style={{
-                        width: `${Math.min(100, (analytics.weekActualSpend / (analytics.weeklyBudget || 1)) * 100)}%`,
+                        width: `${Math.min(100, (analytics.personalWeekActualSpend / (analytics.weeklyBudget || 1)) * 100)}%`,
                       }}
                     />
                   </div>
                   <div className="budget-progress-labels">
-                    <span>{money.format(analytics.weekActualSpend)} of {money.format(analytics.weeklyBudget)}</span>
+                    <span>{money.format(analytics.personalWeekActualSpend)} of {money.format(analytics.weeklyBudget)}</span>
                     <button
                       type="button"
                       style={{ border: 0, background: "none", color: "var(--green)", fontSize: "11px", fontWeight: 600, padding: 0 }}
@@ -1322,6 +1350,15 @@ function BottomSheetWindow({
   const [paidBy, setPaidBy] = useState<string>(editingTrip?.paid_by ?? user?.id ?? members[0]?.user_id ?? "omar");
   const [soloBy, setSoloBy] = useState<string>(editingTrip?.solo_by ?? user?.id ?? members[0]?.user_id ?? "omar");
 
+  // Prevent background scroll and page jumps when bottom sheet is open
+  useEffect(() => {
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prevOverflow;
+    };
+  }, []);
+
   return (
     <div className="bottom-sheet-backdrop" onClick={close}>
       <div className="bottom-sheet" onClick={(e) => e.stopPropagation()}>
@@ -1355,7 +1392,6 @@ function BottomSheetWindow({
                   inputMode="decimal"
                   step="0.01"
                   min="1"
-                  autoFocus
                   required
                   placeholder="0"
                   value={amount}
@@ -1480,7 +1516,7 @@ function BottomSheetWindow({
             </p>
             <div className="sheet-field">
               <span className="segmented-label">Weekly Budget (EGP)</span>
-              <input name="budget" type="number" inputMode="numeric" min="100" step="50" required autoFocus defaultValue={weeklyBudget} />
+              <input name="budget" type="number" inputMode="numeric" min="100" step="50" required defaultValue={weeklyBudget} />
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
               {[1000, 1200, 1500, 1800, 2000, 2400].map((preset) => (
@@ -1525,7 +1561,7 @@ function BottomSheetWindow({
           >
             <div className="sheet-field">
               <span className="segmented-label">Space Name</span>
-              <input name="space" autoFocus required defaultValue="Omar + Khaled" />
+              <input name="space" required defaultValue="Omar + Khaled" />
             </div>
             <div className="sheet-field">
               <span className="segmented-label">Your Name</span>
@@ -1547,7 +1583,7 @@ function BottomSheetWindow({
           >
             <div className="sheet-field">
               <span className="segmented-label">Invite Code</span>
-              <input name="code" autoFocus required placeholder="RIDE2026" />
+              <input name="code" required placeholder="RIDE2026" />
             </div>
             <div className="sheet-field">
               <span className="segmented-label">Your Name</span>

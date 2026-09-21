@@ -137,7 +137,7 @@ export function budgetPercentage(actualSpent: number, expectedBudget: number): n
 }
 
 /**
- * Total solo spending.
+ * Total solo spending across all trips.
  */
 export function soloTotal(trips: Trip[]): number {
   if (!trips || trips.length === 0) return 0;
@@ -147,13 +147,48 @@ export function soloTotal(trips: Trip[]): number {
 }
 
 /**
- * Total shared spending.
+ * Total shared spending across all trips.
  */
 export function sharedTotal(trips: Trip[]): number {
   if (!trips || trips.length === 0) return 0;
   return trips
     .filter((trip) => trip.trip_mode === "shared")
     .reduce((sum, trip) => sum + (Number(trip.amount) || 0), 0);
+}
+
+/**
+ * Calculates a specific member's share for a trip:
+ * - If shared: 50% of trip.amount (trip.amount / 2)
+ * - If solo: 100% of trip.amount IF trip.solo_by === memberId, otherwise 0
+ */
+export function memberTripSpend(trip: Trip, memberId: string): number {
+  const amt = Number(trip.amount) || 0;
+  if (trip.trip_mode === "solo") {
+    return trip.solo_by === memberId ? amt : 0;
+  }
+  return amt / 2;
+}
+
+/**
+ * Calculates a specific member's total personal transportation spend across trips:
+ * (half of shared + own solo only)
+ */
+export function personalTotal(trips: Trip[], memberId: string): number {
+  if (!trips || trips.length === 0 || !memberId) return 0;
+  return trips.reduce((sum, trip) => sum + memberTripSpend(trip, memberId), 0);
+}
+
+/**
+ * Counts unique college days that this specific member had a commute
+ * (either a shared ride, or their own solo ride).
+ */
+export function personalCollegeDaysUsed(trips: Trip[], memberId: string): number {
+  if (!trips || trips.length === 0 || !memberId) return 0;
+  const personalTrips = trips.filter((trip) => {
+    if (trip.trip_mode === "solo") return trip.solo_by === memberId;
+    return true; // shared trip includes both members
+  });
+  return collegeDaysUsed(personalTrips);
 }
 
 /**
@@ -299,12 +334,14 @@ export type DaySpendingItem = {
 
 /**
  * Computes Saturday → Friday spending by day.
+ * If memberId is supplied, calculates personal daily spending (half of shared + own solo only).
  */
 export function computeSpendingByDay(
   allTrips: Trip[],
   weekStart: Date,
   dailyCollegeBudget: number,
-  todayIso: string
+  todayIso: string,
+  memberId?: string
 ): { days: DaySpendingItem[]; maxSpend: number } {
   const dayNames = ["Sat", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri"];
   const dayFullNames = ["Saturday", "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
@@ -316,15 +353,22 @@ export function computeSpendingByDay(
     const isoDate = d.toISOString().slice(0, 10);
     const dayTrips = allTrips.filter((t) => new Date(t.ride_at).toISOString().slice(0, 10) === isoDate);
 
-    const actualSpend = weeklyTotal(dayTrips);
+    const actualSpend = memberId ? personalTotal(dayTrips, memberId) : weeklyTotal(dayTrips);
     if (actualSpend > maxSpend) maxSpend = actualSpend;
 
     const campusTrips = dayTrips.filter((t) => t.direction === "campus");
     const homeTrips = dayTrips.filter((t) => t.direction === "home");
-    const campusSpend = weeklyTotal(campusTrips);
-    const homeSpend = weeklyTotal(homeTrips);
+    const campusSpend = memberId
+      ? campusTrips.reduce((sum, t) => sum + memberTripSpend(t, memberId), 0)
+      : weeklyTotal(campusTrips);
+    const homeSpend = memberId
+      ? homeTrips.reduce((sum, t) => sum + memberTripSpend(t, memberId), 0)
+      : weeklyTotal(homeTrips);
 
-    const isCollegeDay = dayTrips.length > 0;
+    const relevantTrips = memberId
+      ? dayTrips.filter((t) => t.trip_mode === "shared" || t.solo_by === memberId)
+      : dayTrips;
+    const isCollegeDay = relevantTrips.length > 0;
     const difference = actualSpend - dailyCollegeBudget;
     const isToday = isoDate === todayIso;
 
@@ -339,7 +383,7 @@ export function computeSpendingByDay(
       difference,
       isCollegeDay,
       isToday,
-      ridesCount: dayTrips.length,
+      ridesCount: relevantTrips.length,
       campusSpend,
       homeSpend,
       campusCount: campusTrips.length,

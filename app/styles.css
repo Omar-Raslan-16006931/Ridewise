@@ -1277,18 +1277,86 @@ button {
 }
 
 /* ========================================================
+   TRIO KPI CARDS (TOTAL SPENT SHARED+SOLO, SHARED ONLY, SOLO ONLY)
+   ======================================================== */
+.analytics-summary-trio {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr 1fr;
+  gap: 8px;
+}
+
+.trio-card {
+  background: var(--cream);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.trio-card.primary-trio {
+  background: var(--ink);
+  color: white;
+  border-color: var(--ink);
+}
+
+.trio-label {
+  font-family: "DM Mono", monospace;
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  font-weight: 600;
+}
+.trio-card.primary-trio .trio-label {
+  color: #aeb4a8;
+}
+
+.trio-value {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.6px;
+  color: var(--ink);
+  margin-top: auto;
+  white-space: nowrap;
+}
+.trio-card.primary-trio .trio-value {
+  color: var(--lime);
+}
+
+.trio-sub {
+  font-size: 10px;
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.trio-card.primary-trio .trio-sub {
+  color: #c0c6ba;
+}
+
+/* ========================================================
    NATIVE BOTTOM SHEET (FAST, ULTRA-CLEAN MODAL)
    ======================================================== */
 .bottom-sheet-backdrop {
   position: fixed;
-  inset: 0;
-  z-index: 100;
-  background: rgba(18, 24, 20, 0.5);
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  z-index: 9999;
+  background: rgba(18, 24, 20, 0.55);
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
   display: flex;
   flex-direction: column;
   justify-content: flex-end;
+  overscroll-behavior: contain;
+  touch-action: none;
   animation: backdropFadeIn 0.2s ease forwards;
 }
 
@@ -1299,11 +1367,13 @@ button {
   background: var(--cream);
   border-radius: 24px 24px 0 0;
   padding: 16px 20px calc(24px + env(safe-area-inset-bottom, 16px));
-  max-height: 90vh;
-  max-height: 90dvh;
+  max-height: 85vh;
+  max-height: 85dvh;
   overflow-y: auto;
-  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.18);
-  animation: sheetSlideUp 0.26s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  box-shadow: 0 -12px 40px rgba(0, 0, 0, 0.22);
+  animation: sheetSlideUp 0.24s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
 @keyframes sheetSlideUp {

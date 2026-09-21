@@ -108,3 +108,22 @@ test("EGP 42,000 bus savings benchmark", () => {
   const savedPct = busBenchmarkPercentageSaved(total, BUS_BENCHMARK);
   assert.ok(Math.abs(savedPct - ((42000 - 1864.94) / 42000) * 100) < 0.01);
 });
+
+test("personal budget calculates half of shared and own solo only", () => {
+  const { personalTotal, personalCollegeDaysUsed, memberTripSpend } = require("./analytics");
+  // trips:
+  // trip 1: shared 100 -> Omar: 50, Khaled: 50
+  // trip 2: solo 80 by omar -> Omar: 80, Khaled: 0
+  // trip 3: shared 60 -> Omar: 30, Khaled: 30
+  assert.equal(memberTripSpend(trips[0], "omar"), 50);
+  assert.equal(memberTripSpend(trips[1], "omar"), 80);
+  assert.equal(memberTripSpend(trips[1], "khaled"), 0);
+
+  assert.equal(personalTotal(trips, "omar"), 160);
+  assert.equal(personalTotal(trips, "khaled"), 80);
+
+  // Omar rode on 3 days (Sept 10 shared, Sept 11 solo, Sept 12 shared)
+  assert.equal(personalCollegeDaysUsed(trips, "omar"), 3);
+  // Khaled only rode on 2 days (Sept 10 shared, Sept 12 shared)
+  assert.equal(personalCollegeDaysUsed(trips, "khaled"), 2);
+});
