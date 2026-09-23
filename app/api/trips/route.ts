@@ -1,6 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { parseReceiptEmail, type ParsedReceipt } from "../../../lib/receipt-parser";
 
 const directions = new Set(["campus", "home"]);
 const tripModes = new Set(["shared", "solo"]);
@@ -36,15 +37,17 @@ export async function GET() {
   return NextResponse.json({
     endpoint: "/api/trips",
     method: "POST",
-    authentication: "x-ridewise-api-key",
+    authentication: "group_code (body) or x-ridewise-api-key (header)",
     fields: {
-      amount: "number",
-      mode: "shared | solo",
-      direction: "campus | home",
-      rider: "profile UUID for solo rides",
-      paid_by: "profile UUID, optional when the shortcut user is configured",
-      notes: "optional string",
-      ride_at: "optional ISO timestamp",
+      group_code: "string (required, your invite code from Space tab)",
+      amount: "number (optional if email_body is provided)",
+      email_body: "string (optional, paste or pipe raw Uber/DiDi receipt email)",
+      subject: "string (optional, email subject line for provider context)",
+      mode: "shared | solo (default 'shared')",
+      direction: "campus | home (auto-detected if omitted)",
+      paid_by: "string (profile UUID or display name, optional)",
+      notes: "string (optional)",
+      ride_at: "ISO timestamp (auto-detected from receipt if omitted)",
     },
   });
 }
@@ -83,14 +86,28 @@ export async function POST(request: Request) {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 
-  const rawAmount = body.amount ?? body.fare ?? body.cost;
-  const amount = Number(rawAmount);
-  if (!Number.isFinite(amount) || amount <= 0 || amount >= 100000) {
-    return NextResponse.json({ error: "amount must be a positive number under 100,000" }, { status: 400 });
+  // Support parsing raw email text or HTML receipts (Uber, DiDi, Careem, etc.)
+  const rawEmail = body.email_body ?? body.email ?? body.raw_email ?? body.receipt ?? body.text;
+  let parsedReceipt: ParsedReceipt | null = null;
+  if (rawEmail && typeof rawEmail === "string") {
+    parsedReceipt = parseReceiptEmail(rawEmail, {
+      subject: body.subject ?? body.email_subject ?? "",
+      emailDate: body.email_date ?? body.date,
+    });
   }
 
-  // Direction: campus or home (default by Cairo time of day)
-  let direction = String(body.direction ?? "").toLowerCase().trim();
+  const rawAmount = body.amount ?? body.fare ?? body.cost ?? parsedReceipt?.amount;
+  const amount = Number(rawAmount);
+  if (!Number.isFinite(amount) || amount <= 0 || amount >= 100000) {
+    return NextResponse.json({
+      error: parsedReceipt
+        ? `Could not detect ride amount from ${parsedReceipt.service} receipt. Please provide 'amount'.`
+        : "amount must be a positive number under 100,000",
+    }, { status: 400 });
+  }
+
+  // Direction: campus or home (default from receipt or Cairo time of day)
+  let direction = String(body.direction ?? parsedReceipt?.direction ?? "").toLowerCase().trim();
   if (!directions.has(direction)) {
     direction = new Date().getHours() < 13 ? "campus" : "home";
   }
@@ -106,6 +123,13 @@ export async function POST(request: Request) {
     body.paid_by ?? body.paidBy ?? body.payer ?? body.who_paid ?? body.who ?? body.rider ?? ""
   ).trim();
 
+  const defaultNote = parsedReceipt ? parsedReceipt.notes : "Logged via iOS Shortcut";
+  const notes = body.notes ? String(body.notes).trim().slice(0, 280) : defaultNote;
+
+  const rideAtStr = body.ride_at ?? parsedReceipt?.ride_at;
+  const rideAt = rideAtStr ? new Date(String(rideAtStr)) : new Date();
+  const validRideAt = isNaN(rideAt.getTime()) ? new Date() : rideAt;
+
   // ATTEMPT 1: Try database RPC function (bypasses RLS without service role key if installed)
   if (groupCode) {
     try {
@@ -114,7 +138,7 @@ export async function POST(request: Request) {
         p_amount: amount,
         p_trip_mode: tripMode,
         p_payer: rawPayer || null,
-        p_notes: body.notes ? String(body.notes).trim().slice(0, 280) : "Logged via iOS Shortcut",
+        p_notes: notes,
         p_direction: direction,
       });
 
@@ -122,7 +146,13 @@ export async function POST(request: Request) {
         if (rpcData.error || rpcData.success === false) {
           return NextResponse.json({ error: rpcData.error }, { status: 400 });
         }
-        return NextResponse.json({ success: true, trip: rpcData.trip }, { status: 201 });
+        return NextResponse.json({
+          success: true,
+          trip: rpcData.trip,
+          parsed_receipt: parsedReceipt
+            ? { service: parsedReceipt.service, amount, direction, ride_at: validRideAt.toISOString() }
+            : undefined,
+        }, { status: 201 });
       }
     } catch {
       // If RPC is not present, fall through to direct tables
@@ -204,14 +234,12 @@ export async function POST(request: Request) {
   const payerId = matchedMember.user_id;
   const riderId = tripMode === "solo" ? payerId : null;
   const createdBy = payerId;
-  const notes = body.notes ? String(body.notes).trim().slice(0, 280) : "Logged via iOS Shortcut";
-  const rideAt = body.ride_at ? new Date(String(body.ride_at)) : new Date();
 
   const { data: trip, error } = await supabase
     .from("ride_trips")
     .insert({
       group_id: groupId,
-      ride_at: rideAt.toISOString(),
+      ride_at: validRideAt.toISOString(),
       direction,
       amount,
       trip_mode: tripMode,
@@ -236,5 +264,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ success: true, trip }, { status: 201 });
+  return NextResponse.json({
+    success: true,
+    trip,
+    parsed_receipt: parsedReceipt
+      ? { service: parsedReceipt.service, amount, direction, ride_at: validRideAt.toISOString() }
+      : undefined,
+  }, { status: 201 });
 }

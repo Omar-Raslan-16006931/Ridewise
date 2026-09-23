@@ -1922,6 +1922,9 @@ export default function Home() {
           }}
           hasPasskey={hasPasskey}
           onSignInPasskey={signInWithPasskey}
+          onRefreshWorkspace={async () => {
+            if (user) await loadWorkspace(user.id, false);
+          }}
         />
       )}
     </div>
@@ -1949,6 +1952,7 @@ function BottomSheetWindow({
   onSignIn,
   hasPasskey,
   onSignInPasskey,
+  onRefreshWorkspace,
 }: {
   modal: Exclude<Modal, null>;
   close: () => void;
@@ -1967,6 +1971,7 @@ function BottomSheetWindow({
   onSignIn: () => Promise<void>;
   hasPasskey?: boolean;
   onSignInPasskey?: () => Promise<void>;
+  onRefreshWorkspace?: () => Promise<void>;
 }) {
   const now = new Date();
   const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -1998,6 +2003,41 @@ function BottomSheetWindow({
     editingTrip?.solo_by ?? matchedPayer ?? user?.id ?? members[0]?.user_id ?? "omar"
   );
   const [closing, setClosing] = useState(false);
+  const [shortcutMode, setShortcutMode] = useState<"email" | "manual">("email");
+  const [testReceiptText, setTestReceiptText] = useState("");
+  const [testParsing, setTestParsing] = useState(false);
+
+  async function handleTestParseReceipt() {
+    if (!testReceiptText.trim()) {
+      return notify("Paste an Uber or DiDi email receipt first.", "info");
+    }
+    setTestParsing(true);
+    try {
+      const res = await fetch("/api/trips", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          group_code: group?.invite_code,
+          email_body: testReceiptText,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        throw new Error(data.error || "Failed to parse receipt");
+      }
+      const svc = data.parsed_receipt?.service ? data.parsed_receipt.service.toUpperCase() : "Ride";
+      const amt = data.parsed_receipt?.amount ?? data.trip?.amount;
+      const dir = data.parsed_receipt?.direction ?? data.trip?.direction;
+      notify(`Auto-logged ${svc}: EGP ${amt} (${dir === "campus" ? "To Campus" : "Going Home"})!`, "success");
+      setTestReceiptText("");
+      handleClose();
+      if (onRefreshWorkspace) await onRefreshWorkspace();
+    } catch (err: any) {
+      notify(err?.message || "Failed to auto-detect receipt.", "error");
+    } finally {
+      setTestParsing(false);
+    }
+  }
 
   function handleClose() {
     if (closing) return;
@@ -2311,169 +2351,331 @@ function BottomSheetWindow({
           </div>
         )}
 
-        {/* IOS SHORTCUT SETUP */}
+        {/* IOS SHORTCUT & EMAIL AUTO-DETECT */}
         {modal === "shortcut" && (
-          <div className="sheet-form" style={{ gap: "14px" }}>
-            <a
-              href="shortcuts://"
-              className="sheet-submit-btn"
-              style={{ textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px", padding: "12px" }}
-            >
-              <span>Open Apple Shortcuts App</span>
-              <span>↗</span>
-            </a>
+          <div className="sheet-form" style={{ gap: "12px" }}>
+            {/* Segmented Switcher */}
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", background: "var(--surface-container)", padding: "4px", borderRadius: "10px", border: "1px solid var(--border)" }}>
+              <button
+                type="button"
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: "8px",
+                  border: "none",
+                  fontWeight: 600,
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  background: shortcutMode === "email" ? "var(--surface)" : "transparent",
+                  color: shortcutMode === "email" ? "var(--foreground)" : "var(--muted)",
+                  boxShadow: shortcutMode === "email" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                }}
+                onClick={() => setShortcutMode("email")}
+              >
+                📧 Auto-Detect Email
+              </button>
+              <button
+                type="button"
+                style={{
+                  padding: "8px 10px",
+                  borderRadius: "8px",
+                  border: "none",
+                  fontWeight: 600,
+                  fontSize: "12px",
+                  cursor: "pointer",
+                  background: shortcutMode === "manual" ? "var(--surface)" : "transparent",
+                  color: shortcutMode === "manual" ? "var(--foreground)" : "var(--muted)",
+                  boxShadow: shortcutMode === "manual" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
+                }}
+                onClick={() => setShortcutMode("manual")}
+              >
+                ⚡ Siri / 1-Tap
+              </button>
+            </div>
 
-            {/* Webhook Endpoint Box */}
-            <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "12px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "8px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
-                <span style={{ color: "var(--muted)", fontWeight: 500 }}>Action:</span>
-                <span style={{ fontWeight: 600 }}>Get Contents of URL</span>
+            {shortcutMode === "email" ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "12px", padding: "12px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 700, fontSize: "13px", color: "#065f46" }}>
+                    <span>✨</span>
+                    <span>100% Automatic Background Logging</span>
+                  </div>
+                  <p style={{ fontSize: "11.5px", color: "#047857", margin: "4px 0 0 0", lineHeight: 1.45 }}>
+                    Whenever Uber or DiDi emails your receipt, your iPhone can trigger a background automation that sends the receipt to Ridewise. Amount (EGP), date, time, and direction are detected automatically!
+                  </p>
+                </div>
+
+                {/* Step by Step Guide */}
+                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "14px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <span style={{ fontSize: "13px", fontWeight: 700 }}>Setup in iOS Shortcuts (1 Minute)</span>
+                  
+                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", lineHeight: 1.4 }}>
+                    <span style={{ background: "var(--surface)", border: "1px solid var(--border)", width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "11px", flexShrink: 0 }}>1</span>
+                    <span>Open <strong>Shortcuts</strong> app › tap <strong>Automation</strong> tab at bottom › tap <strong>+</strong> › select <strong>Email</strong>.</span>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", lineHeight: 1.4 }}>
+                    <span style={{ background: "var(--surface)", border: "1px solid var(--border)", width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "11px", flexShrink: 0 }}>2</span>
+                    <div>
+                      <div>Set <strong>Sender</strong> contains: <code>uber</code> or <code>didi</code></div>
+                      <div>Set <strong>Subject</strong> contains: <code>trip</code> or <code>receipt</code></div>
+                      <div style={{ marginTop: "2px", color: "#059669", fontWeight: 600 }}>Select: "Run Immediately" (Turn off "Notify When Run")</div>
+                    </div>
+                  </div>
+
+                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", lineHeight: 1.4 }}>
+                    <span style={{ background: "var(--surface)", border: "1px solid var(--border)", width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "11px", flexShrink: 0 }}>3</span>
+                    <div>
+                      <div>Add Action: <strong>Get Contents of URL</strong></div>
+                      <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>
+                        URL: <code>{typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips"}</code>
+                      </div>
+                      <div style={{ fontSize: "11px", color: "var(--muted)" }}>Method: <strong>POST</strong> · Request Body: <strong>JSON</strong></div>
+                    </div>
+                  </div>
+
+                  {/* 2 Fields Table */}
+                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
+                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: "11px" }}>
+                        <code>group_code</code> (Text) = <strong>{group?.invite_code || "RIDE2026"}</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="copy-code-btn"
+                        style={{ padding: "3px 6px", fontSize: "10px" }}
+                        onClick={() => {
+                          void navigator.clipboard.writeText(group?.invite_code || "RIDE2026");
+                          notify("Copied invite code!", "info");
+                        }}
+                      >
+                        Copy
+                      </button>
+                    </div>
+
+                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      <div style={{ fontSize: "11px" }}>
+                        <code>email_body</code> (Text) = <strong>Shortcut Input</strong>
+                      </div>
+                      <button
+                        type="button"
+                        className="copy-code-btn"
+                        style={{ padding: "3px 6px", fontSize: "10px" }}
+                        onClick={() => {
+                          void navigator.clipboard.writeText("email_body");
+                          notify("Copied key: email_body", "info");
+                        }}
+                      >
+                        Copy Key
+                      </button>
+                    </div>
+                  </div>
+
+                  <a
+                    href="shortcuts://"
+                    className="sheet-submit-btn"
+                    style={{ textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "12px", padding: "10px", marginTop: "4px" }}
+                  >
+                    <span>Open Shortcuts App to Set Up Automation</span>
+                    <span>↗</span>
+                  </a>
+                </div>
+
+                {/* Instant Test Box */}
+                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "12px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <span style={{ fontSize: "12px", fontWeight: 700 }}>🧪 Test Receipt Auto-Detection</span>
+                  <textarea
+                    rows={3}
+                    placeholder="Paste an Uber or DiDi email receipt here to test..."
+                    value={testReceiptText}
+                    onChange={(e) => setTestReceiptText(e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "8px",
+                      borderRadius: "8px",
+                      border: "1px solid var(--border)",
+                      background: "var(--surface)",
+                      color: "var(--foreground)",
+                      fontSize: "11px",
+                      fontFamily: "inherit",
+                      resize: "vertical",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <button
+                    type="button"
+                    className="sheet-submit-btn"
+                    style={{ fontSize: "12px", padding: "8px" }}
+                    disabled={testParsing}
+                    onClick={() => void handleTestParseReceipt()}
+                  >
+                    {testParsing ? "Detecting & Logging..." : "Test & Log Ride Now"}
+                  </button>
+                </div>
               </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
-                <span style={{ color: "var(--muted)", fontWeight: 500 }}>Method:</span>
-                <strong style={{ color: "var(--accent)" }}>POST</strong>
-              </div>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
-                <span style={{ fontFamily: "monospace", fontSize: "11px", wordBreak: "break-all" }}>
-                  {typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips"}
-                </span>
-                <button
-                  type="button"
-                  className="copy-code-btn"
-                  style={{ padding: "3px 8px", fontSize: "10px", marginLeft: "8px" }}
-                  onClick={() => {
-                    const url = typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips";
-                    void navigator.clipboard.writeText(url);
-                    notify("Copied API URL!", "info");
-                  }}
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
+                <a
+                  href="shortcuts://"
+                  className="sheet-submit-btn"
+                  style={{ textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px", padding: "12px" }}
                 >
-                  Copy URL
-                </button>
+                  <span>Open Apple Shortcuts App</span>
+                  <span>↗</span>
+                </a>
+
+                {/* Webhook Endpoint Box */}
+                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "12px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "8px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
+                    <span style={{ color: "var(--muted)", fontWeight: 500 }}>Action:</span>
+                    <span style={{ fontWeight: 600 }}>Get Contents of URL</span>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
+                    <span style={{ color: "var(--muted)", fontWeight: 500 }}>Method:</span>
+                    <strong style={{ color: "var(--accent)" }}>POST</strong>
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                    <span style={{ fontFamily: "monospace", fontSize: "11px", wordBreak: "break-all" }}>
+                      {typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips"}
+                    </span>
+                    <button
+                      type="button"
+                      className="copy-code-btn"
+                      style={{ padding: "3px 8px", fontSize: "10px", marginLeft: "8px" }}
+                      onClick={() => {
+                        const url = typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips";
+                        void navigator.clipboard.writeText(url);
+                        notify("Copied API URL!", "info");
+                      }}
+                    >
+                      Copy URL
+                    </button>
+                  </div>
+                </div>
+
+                {/* Apple Shortcuts Fields & Types */}
+                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "14px", border: "1px solid var(--border)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>
+                      Request Body Fields & Types
+                    </span>
+                    <span style={{ fontSize: "10px", color: "var(--accent)", fontWeight: 600 }}>
+                      Tap key to copy
+                    </span>
+                  </div>
+                  <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
+                    In "Get contents of URL", set Request Body to <strong>JSON</strong> and add these 4 fields:
+                  </p>
+
+                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                    {/* 1. group_code */}
+                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>group_code</code>
+                          <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="copy-code-btn"
+                          style={{ padding: "4px 8px", fontSize: "11px" }}
+                          onClick={() => {
+                            void navigator.clipboard.writeText("group_code");
+                            notify("Copied key: group_code", "info");
+                          }}
+                        >
+                          Copy Key
+                        </button>
+                      </div>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px", fontSize: "11px" }}>
+                        <span style={{ color: "var(--muted)" }}>Value: <strong>{group?.invite_code || "RIDE2026"}</strong></span>
+                        <button
+                          type="button"
+                          style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "11px", padding: 0 }}
+                          onClick={() => {
+                            void navigator.clipboard.writeText(group?.invite_code || "RIDE2026");
+                            notify("Copied invite code!", "info");
+                          }}
+                        >
+                          Copy Value
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* 2. amount */}
+                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>amount</code>
+                          <span style={{ fontSize: "10px", background: "rgba(168, 85, 247, 0.15)", color: "#a855f7", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Number</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="copy-code-btn"
+                          style={{ padding: "4px 8px", fontSize: "11px" }}
+                          onClick={() => {
+                            void navigator.clipboard.writeText("amount");
+                            notify("Copied key: amount", "info");
+                          }}
+                        >
+                          Copy Key
+                        </button>
+                      </div>
+                      <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
+                        Value: Select <strong>Shortcut Input</strong> (from "Ask for Number")
+                      </div>
+                    </div>
+
+                    {/* 3. trip_mode */}
+                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>trip_mode</code>
+                          <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="copy-code-btn"
+                          style={{ padding: "4px 8px", fontSize: "11px" }}
+                          onClick={() => {
+                            void navigator.clipboard.writeText("trip_mode");
+                            notify("Copied key: trip_mode", "info");
+                          }}
+                        >
+                          Copy Key
+                        </button>
+                      </div>
+                      <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
+                        Value: Select <strong>Chosen Item</strong> from Menu ("shared" or "solo")
+                      </div>
+                    </div>
+
+                    {/* 4. paid_by */}
+                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>paid_by</code>
+                          <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="copy-code-btn"
+                          style={{ padding: "4px 8px", fontSize: "11px" }}
+                          onClick={() => {
+                            void navigator.clipboard.writeText("paid_by");
+                            notify("Copied key: paid_by", "info");
+                          }}
+                        >
+                          Copy Key
+                        </button>
+                      </div>
+                      <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
+                        Value: Select <strong>Chosen Item</strong> from Menu ({members.map((m) => m.display_name).join(" or ") || "Omar or Khaled"})
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
-            </div>
-
-            {/* Apple Shortcuts Fields & Types */}
-            <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "14px", border: "1px solid var(--border)" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>
-                  Request Body Fields & Types
-                </span>
-                <span style={{ fontSize: "10px", color: "var(--accent)", fontWeight: 600 }}>
-                  Tap key to copy
-                </span>
-              </div>
-              <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-                In "Get contents of URL", set Request Body to <strong>JSON</strong> and add these 4 fields:
-              </p>
-
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {/* 1. group_code */}
-                <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>group_code</code>
-                      <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="copy-code-btn"
-                      style={{ padding: "4px 8px", fontSize: "11px" }}
-                      onClick={() => {
-                        void navigator.clipboard.writeText("group_code");
-                        notify("Copied key: group_code", "info");
-                      }}
-                    >
-                      Copy Key
-                    </button>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px", fontSize: "11px" }}>
-                    <span style={{ color: "var(--muted)" }}>Value: <strong>{group?.invite_code || "RIDE2026"}</strong></span>
-                    <button
-                      type="button"
-                      style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "11px", padding: 0 }}
-                      onClick={() => {
-                        void navigator.clipboard.writeText(group?.invite_code || "RIDE2026");
-                        notify("Copied invite code!", "info");
-                      }}
-                    >
-                      Copy Value
-                    </button>
-                  </div>
-                </div>
-
-                {/* 2. amount */}
-                <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>amount</code>
-                      <span style={{ fontSize: "10px", background: "rgba(168, 85, 247, 0.15)", color: "#a855f7", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Number</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="copy-code-btn"
-                      style={{ padding: "4px 8px", fontSize: "11px" }}
-                      onClick={() => {
-                        void navigator.clipboard.writeText("amount");
-                        notify("Copied key: amount", "info");
-                      }}
-                    >
-                      Copy Key
-                    </button>
-                  </div>
-                  <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
-                    Value: Select <strong>Shortcut Input</strong> (from "Ask for Number")
-                  </div>
-                </div>
-
-                {/* 3. trip_mode */}
-                <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>trip_mode</code>
-                      <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="copy-code-btn"
-                      style={{ padding: "4px 8px", fontSize: "11px" }}
-                      onClick={() => {
-                        void navigator.clipboard.writeText("trip_mode");
-                        notify("Copied key: trip_mode", "info");
-                      }}
-                    >
-                      Copy Key
-                    </button>
-                  </div>
-                  <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
-                    Value: Select <strong>Chosen Item</strong> from Menu ("shared" or "solo")
-                  </div>
-                </div>
-
-                {/* 4. paid_by */}
-                <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>paid_by</code>
-                      <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
-                    </div>
-                    <button
-                      type="button"
-                      className="copy-code-btn"
-                      style={{ padding: "4px 8px", fontSize: "11px" }}
-                      onClick={() => {
-                        void navigator.clipboard.writeText("paid_by");
-                        notify("Copied key: paid_by", "info");
-                      }}
-                    >
-                      Copy Key
-                    </button>
-                  </div>
-                  <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
-                    Value: Select <strong>Chosen Item</strong> from Menu ({members.map((m) => m.display_name).join(" or ") || "Omar or Khaled"})
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
           </div>
         )}
       </div>
