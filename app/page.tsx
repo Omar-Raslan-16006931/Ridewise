@@ -2442,8 +2442,15 @@ function BottomSheetWindow({
                               method: "POST",
                               url: `${origin}/api/trips`,
                               sendBody: true,
-                              specifyBody: "json",
-                              jsonBody: `={\n  "group_code": "${group?.invite_code || "RIDE2026"}",\n  "email_body": $json.snippet ? ($json.snippet + "\\n" + ($json.text || "")) : ($json.text || $json.html || ""),\n  "subject": $json.subject || "",\n  "email_date": $json.date || ""\n}`
+                              specifyBody: "keypair",
+                              bodyParameters: {
+                                parameters: [
+                                  { name: "group_code", value: group?.invite_code || "RIDE2026" },
+                                  { name: "email_body", value: "={{ $json.snippet ? ($json.snippet + '\\n' + ($json.text || '')) : ($json.text || $json.html || '') }}" },
+                                  { name: "subject", value: "={{ $json.subject || '' }}" },
+                                  { name: "email_date", value: "={{ $json.date || '' }}" }
+                                ]
+                              }
                             },
                             id: "2",
                             name: "HTTP - Send to Ridewise",
