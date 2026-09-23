@@ -2400,8 +2400,78 @@ function BottomSheetWindow({
                     <span>100% Automatic Background Logging</span>
                   </div>
                   <p style={{ fontSize: "11.5px", color: "#047857", margin: "4px 0 0 0", lineHeight: 1.45 }}>
-                    Whenever Uber or DiDi emails your receipt, your iPhone can trigger a background automation that sends the receipt to Ridewise. Amount (EGP), date, time, and direction are detected automatically!
+                    Whenever Uber or DiDi emails your receipt, n8n detects the incoming email, sends the receipt to Ridewise, and our backend extracts the amount (EGP), date, time, and direction automatically!
                   </p>
+                </div>
+
+                {/* n8n Automation Box */}
+                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "14px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "10px" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                      <span style={{ fontSize: "15px" }}>⚡</span>
+                      <span style={{ fontSize: "13px", fontWeight: 700 }}>n8n Cloud / Self-Hosted Workflow</span>
+                    </div>
+                    <span style={{ fontSize: "10px", background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>Recommended</span>
+                  </div>
+                  <p style={{ fontSize: "11.5px", color: "var(--muted)", margin: 0, lineHeight: 1.45 }}>
+                    Connects directly to your Gmail, iCloud, or IMAP. When an Uber or DiDi email arrives, n8n forwards it to Ridewise in the background.
+                  </p>
+                  
+                  <button
+                    type="button"
+                    className="sheet-submit-btn"
+                    style={{ background: "linear-gradient(135deg, #ea580c, #c2410c)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontSize: "12px", padding: "10px" }}
+                    onClick={() => {
+                      const origin = typeof window !== "undefined" ? window.location.origin : "https://ridewise.vercel.app";
+                      const n8nJson = {
+                        name: "Ridewise - Uber & DiDi Receipt Auto-Logger",
+                        nodes: [
+                          {
+                            parameters: {
+                              pollTimes: { item: [{ mode: "everyMinute" }] },
+                              filters: { q: "from:(uber.com OR didiglobal.com) (receipt OR trip OR رحلة OR إيصال)" }
+                            },
+                            id: "1",
+                            name: "Gmail - New Uber/DiDi Receipt",
+                            type: "n8n-nodes-base.gmailTrigger",
+                            typeVersion: 1.2,
+                            position: [240, 300]
+                          },
+                          {
+                            parameters: {
+                              method: "POST",
+                              url: `${origin}/api/trips`,
+                              sendBody: true,
+                              specifyBody: "json",
+                              jsonBody: `={\n  "group_code": "${group?.invite_code || "RIDE2026"}",\n  "email_body": $json.snippet ? ($json.snippet + "\\n" + ($json.text || "")) : ($json.text || $json.html || ""),\n  "subject": $json.subject || "",\n  "email_date": $json.date || ""\n}`
+                            },
+                            id: "2",
+                            name: "HTTP - Send to Ridewise",
+                            type: "n8n-nodes-base.httpRequest",
+                            typeVersion: 4.2,
+                            position: [480, 300]
+                          }
+                        ],
+                        connections: {
+                          "Gmail - New Uber/DiDi Receipt": {
+                            main: [[{ node: "HTTP - Send to Ridewise", type: "main", index: 0 }]]
+                          }
+                        },
+                        pinData: {}
+                      };
+                      void navigator.clipboard.writeText(JSON.stringify(n8nJson, null, 2));
+                      notify("Copied n8n workflow! Paste it (Ctrl+V) on your n8n canvas.", "success");
+                    }}
+                  >
+                    <span>📋 Copy Ready-to-Use n8n Workflow JSON</span>
+                  </button>
+
+                  <div style={{ fontSize: "11px", color: "var(--muted)", lineHeight: 1.45, background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
+                    <strong>How to import into n8n:</strong><br />
+                    1. Open any n8n workflow canvas and press <strong>Ctrl+V</strong> (or Cmd+V) to paste.<br />
+                    2. Link your Gmail / Email credential on the trigger node.<br />
+                    3. Turn the workflow <strong>Active</strong>!
+                  </div>
                 </div>
 
                 {/* Step by Step Guide */}
