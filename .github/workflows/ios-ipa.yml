@@ -6,7 +6,7 @@ name: Build iOS IPA
 on:
   workflow_dispatch:
   push:
-    branches: [main, claude/ios-app]
+    branches: [main]
     paths:
       - "ios/**"
       - "native/**"
