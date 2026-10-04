@@ -4,7 +4,7 @@ A shared Uber ledger for two people: record a one-way ride, say who paid, and se
 
 ## Prerequisites
 
-Use Node 20 LTS for local development and deployment. This project is currently compatible with Node 20 and is not stable on Node 24 because of a Next.js runtime bug during prerendering.
+Use Node 22 LTS for local development and deployment (Vercel no longer builds with Node 20). Node 24 has not been tested with this project.
 
 ## Set up Supabase
 
@@ -16,7 +16,7 @@ Use Node 20 LTS for local development and deployment. This project is currently 
 
 ## Deploy to Vercel
 
-Import the `Ridewise` folder as the project root, add the variables below, and deploy with Node 20:
+Import the `Ridewise` folder as the project root, add the variables below, and deploy with Node 22:
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`
