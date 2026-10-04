@@ -17,6 +17,7 @@ export type Trip = {
   notes: string | null;
   settled_at: string | null;
   settled_by: string | null;
+  created_at?: string;
 };
 
 export type RideGroup = {

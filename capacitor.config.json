@@ -1,0 +1,23 @@
+{
+  "appId": "com.omar.ridewise",
+  "appName": "Ridewise",
+  "webDir": "native/www",
+  "server": {
+    "url": "https://ubershareride.vercel.app",
+    "errorPath": "offline.html"
+  },
+  "ios": {
+    "contentInset": "never",
+    "backgroundColor": "#f6f4ec"
+  },
+  "plugins": {
+    "BackgroundRunner": {
+      "label": "com.omar.ridewise.ridecheck",
+      "src": "runners/ride-check.js",
+      "event": "checkRides",
+      "repeat": true,
+      "interval": 15,
+      "autoStart": true
+    }
+  }
+}

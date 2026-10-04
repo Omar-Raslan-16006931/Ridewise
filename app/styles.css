@@ -77,11 +77,11 @@ button {
   position: sticky;
   top: 0;
   z-index: 30;
-  height: 60px;
+  height: calc(60px + env(safe-area-inset-top, 0px));
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 18px;
+  padding: env(safe-area-inset-top, 0px) 18px 0;
   background: rgba(246, 244, 238, 0.92);
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
@@ -1779,7 +1779,7 @@ button {
 /* TOASTS */
 .toast-portal {
   position: fixed;
-  top: 16px;
+  top: calc(16px + env(safe-area-inset-top, 0px));
   left: 50%;
   transform: translateX(-50%);
   z-index: 9999;
@@ -3043,3 +3043,30 @@ button:active, .btn:active, .filter-chip:active, .hero-action-btn:active, .sheet
 }
 
 
+
+/* ========================================================
+   iOS APP (Capacitor) — applied only inside the installed app
+   ======================================================== */
+html.native-ios,
+html.native-ios body {
+  background: var(--paper);
+  overscroll-behavior-y: none;
+}
+
+html.native-ios body {
+  -webkit-touch-callout: none;
+}
+
+html.native-ios button,
+html.native-ios nav,
+html.native-ios .app-topbar {
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* Text under 16px makes iOS zoom the page when a field is focused. */
+html.native-ios input,
+html.native-ios select,
+html.native-ios textarea {
+  font-size: 16px;
+}

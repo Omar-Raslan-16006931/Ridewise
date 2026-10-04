@@ -3,6 +3,17 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "../lib/supabase";
 import type { Member, RideGroup, Trip } from "../lib/types";
+import { describeTrip } from "../lib/ride-notifications";
+import {
+  isNativeApp,
+  getNotificationPermission,
+  requestNotificationPermission,
+  sendTestNotification,
+  syncBackgroundCheck,
+  signInWithGoogleNative,
+  listenForNativeAuth,
+  type NotificationPermission,
+} from "../lib/native";
 import {
   BUS_BENCHMARK,
   EXPECTED_COLLEGE_DAYS,
@@ -217,12 +228,22 @@ export default function Home() {
 
   const lastLoadedUserIdRef = useRef<string | null>(null);
 
+  // iOS app: notification permission state, plus what this device has already seen
+  // so only rides added elsewhere (auto-logged or by the other rider) are announced.
+  const [nativeApp, setNativeApp] = useState(false);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission>("unsupported");
+  const tripsRef = useRef<Trip[]>(trips);
+  tripsRef.current = trips;
+  const hasLoadedTripsRef = useRef<boolean>(trips.length > 0);
+
   async function handleAuthSession(sessionUser: { id: string; email?: string } | null) {
     if (!sessionUser) {
       setUser(null);
       setLoading(false);
       lastLoadedUserIdRef.current = null;
       try { localStorage.removeItem("ridewise_cached_user"); } catch {}
+      hasLoadedTripsRef.current = false;
+      syncBackgroundCheck({ groupCode: "", lastSeen: null });
       return;
     }
     setUser(sessionUser);
@@ -240,6 +261,8 @@ export default function Home() {
 
     try {
       const membership = await supabase.from("ride_group_members").select("group_id").eq("user_id", userId).limit(1).maybeSingle();
+      // A failed background refresh (no signal) must not wipe what is already on screen.
+      if (membership.error && hasLoadedTripsRef.current) return;
       if (membership.error || !membership.data) {
         setGroup(null);
         setMembers([]);
@@ -249,7 +272,7 @@ export default function Home() {
       const groupResult = await supabase.from("ride_groups").select("id,name,invite_code").eq("id", membership.data.group_id).single();
       const [membersResult, tripsResult] = await Promise.all([
         supabase.from("ride_group_members").select("user_id,display_name").eq("group_id", membership.data.group_id).order("joined_at"),
-        supabase.from("ride_trips").select("id,ride_at,direction,amount,trip_mode,solo_by,paid_by,notes,settled_at,settled_by").eq("group_id", membership.data.group_id).order("ride_at", { ascending: false }),
+        supabase.from("ride_trips").select("id,ride_at,direction,amount,trip_mode,solo_by,paid_by,notes,settled_at,settled_by,created_at").eq("group_id", membership.data.group_id).order("ride_at", { ascending: false }),
       ]);
       if (groupResult.data) {
         setGroup(groupResult.data as RideGroup);
@@ -259,7 +282,31 @@ export default function Home() {
       setMembers(newMembers);
       try { localStorage.setItem("ridewise_cached_members", JSON.stringify(newMembers)); } catch {}
 
+      if (tripsResult.error) return;
       const newTrips = (tripsResult.data ?? []).map((trip) => ({ ...trip, amount: Number(trip.amount) })) as Trip[];
+
+      // Announce rides that appeared from somewhere else (receipt auto-log, Shortcut, the other rider).
+      if (hasLoadedTripsRef.current) {
+        const knownIds = new Set(tripsRef.current.map((trip) => trip.id));
+        const arrivals = newTrips.filter((trip) => !knownIds.has(trip.id));
+        if (arrivals.length > 3) {
+          notify(`${arrivals.length} new rides were added.`, "info");
+        } else {
+          for (const trip of arrivals) {
+            const text = describeTrip(trip, newMembers);
+            notify(`${text.title}: ${text.body}`, "info");
+          }
+        }
+      }
+      hasLoadedTripsRef.current = true;
+      if (groupResult.data) {
+        const newestCreatedAt = newTrips.reduce<string | null>(
+          (latest, trip) => (trip.created_at && (!latest || new Date(trip.created_at) > new Date(latest)) ? trip.created_at : latest),
+          null
+        );
+        syncBackgroundCheck({ groupCode: (groupResult.data as RideGroup).invite_code, lastSeen: newestCreatedAt });
+      }
+
       setTrips(newTrips);
       try { localStorage.setItem("ridewise_cached_trips", JSON.stringify(newTrips)); } catch {}
     } finally {
@@ -289,6 +336,62 @@ export default function Home() {
     return () => listener.subscription.unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // iOS app setup: mark the page for native styling and ask for notification permission once signed in.
+  useEffect(() => {
+    if (!isNativeApp()) return;
+    setNativeApp(true);
+    document.documentElement.classList.add("native-ios");
+    void getNotificationPermission().then(setNotificationPermission);
+  }, []);
+
+  useEffect(() => {
+    if (!nativeApp || !user || notificationPermission !== "prompt") return;
+    void requestNotificationPermission().then(setNotificationPermission);
+  }, [nativeApp, user, notificationPermission]);
+
+  // iOS app: finish Google sign-in when the browser sheet hands the session back.
+  useEffect(() => {
+    if (!supabase) return;
+    return listenForNativeAuth(supabase, (error) => {
+      if (error) notify(`Google sign-in failed: ${error}`, "error");
+      else setModal(null);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Pick up rides logged elsewhere: refresh when the app comes back to the front, and every minute while open.
+  useEffect(() => {
+    if (!supabase || !user) return;
+    const userId = user.id;
+    let lastRefresh = Date.now();
+    const refresh = () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastRefresh < 15000) return;
+      lastRefresh = Date.now();
+      void loadWorkspace(userId, false);
+    };
+    document.addEventListener("visibilitychange", refresh);
+    const timer = window.setInterval(refresh, 60000);
+    return () => {
+      document.removeEventListener("visibilitychange", refresh);
+      window.clearInterval(timer);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
+
+  async function handleNotificationSetup() {
+    let permission = notificationPermission;
+    if (permission === "prompt") {
+      permission = await requestNotificationPermission();
+      setNotificationPermission(permission);
+    }
+    if (permission !== "granted") {
+      notify("Notifications are off. Turn them on in iPhone Settings › Ridewise › Notifications.", "error");
+      return;
+    }
+    const sent = await sendTestNotification();
+    notify(sent ? "Test notification coming in 6 seconds. Close the app to see it." : "Could not schedule a test notification.", sent ? "info" : "error");
+  }
 
   const stats = useMemo(() => {
     const activeTrips = trips.filter((trip) => trip.trip_mode === "shared" && !trip.settled_at);
@@ -1745,7 +1848,37 @@ export default function Home() {
                   <span style={{ color: "var(--muted)" }}>›</span>
                 </button>
 
-                {supabase && user && (
+                {nativeApp && (
+                  <button
+                    type="button"
+                    className="settings-item-btn"
+                    onClick={() => void handleNotificationSetup()}
+                  >
+                    <div className="settings-item-title">
+                      <span>🔔</span>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                          <span>Ride Notifications</span>
+                          {notificationPermission === "granted" && (
+                            <span style={{ fontSize: "10px", fontWeight: 700, color: "#059669", background: "#d1fae5", padding: "1px 6px", borderRadius: "100px" }}>
+                              On ✓
+                            </span>
+                          )}
+                        </div>
+                        <span className="settings-item-sub">
+                          {notificationPermission === "granted"
+                            ? "Alerts when a ride is auto-logged · Tap to send a test"
+                            : notificationPermission === "denied"
+                            ? "Turned off in iPhone Settings"
+                            : "Tap to allow alerts for auto-logged rides"}
+                        </span>
+                      </div>
+                    </div>
+                    <span style={{ color: "var(--muted)" }}>›</span>
+                  </button>
+                )}
+
+                {supabase && user && !nativeApp && (
                   <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
                     <button
                       type="button"
@@ -1916,6 +2049,11 @@ export default function Home() {
           }}
           onSignIn={async () => {
             if (!supabase) return;
+            if (isNativeApp()) {
+              const failure = await signInWithGoogleNative(supabase);
+              if (failure) notify(failure, "error");
+              return;
+            }
             const result = await supabase.auth.signInWithOAuth({ provider: "google", options: { redirectTo: window.location.origin } });
             if (result.error) return notify(result.error.message, "error");
             setModal(null);

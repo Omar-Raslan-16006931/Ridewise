@@ -85,3 +85,13 @@ In Apple Shortcuts, use **Get Contents of URL** with method `POST`, header `x-ri
 ```
 
 For a shared ride, use `"mode": "shared"` and omit `rider`. The endpoint defaults `paid_by`, `created_by`, and the group from the configured Shortcut user and group.
+
+## iOS app (sideloaded IPA)
+
+The iPhone app is a thin native shell (Capacitor, in `ios/`) that opens the live site at `https://ubershareride.vercel.app`, so web changes reach the phone through Vercel without reinstalling.
+
+- **Get the IPA:** GitHub → Actions → **Build iOS IPA** → latest run → download `Ridewise-ipa`, unzip it, and install `Ridewise.ipa` with Sideloadly or AltStore. The build is unsigned; the sideloading tool signs it with your Apple ID.
+- **Rebuilds** run automatically when `ios/`, `native/`, `capacitor.config.json`, or `package.json` change on `main`, or manually from the Actions tab.
+- **Sign-in:** Google sign-in opens in a Safari sheet and returns through `/auth/native` and the `ridewise://` URL scheme. Passkeys are hidden in the app because iOS only allows them in apps signed with a paid developer account.
+- **Notifications:** `native/www/runners/ride-check.js` runs through iOS Background App Refresh, asks `GET /api/trips/recent` for rides created since the phone last looked, and shows a local notification for each. iOS chooses when it runs (usually within minutes to a couple of hours), and it stops if the app is swiped away in the app switcher or Background App Refresh is off. Instant push would need Apple's push service, which requires a paid developer account.
+- `POST /api/trips` also returns `notification.title` and `notification.body`, which a Shortcut can pass to a **Show Notification** action for an instant alert on the phone that logged the ride.

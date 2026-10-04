@@ -1,0 +1,76 @@
+name: Build iOS IPA
+
+# Builds an unsigned Ridewise.ipa for sideloading (Sideloadly / AltStore sign it on install).
+# The app loads https://ubershareride.vercel.app, so web changes go live through Vercel
+# and a new IPA is only needed when the native shell changes.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main, claude/ios-app]
+    paths:
+      - "ios/**"
+      - "native/**"
+      - "capacitor.config.json"
+      - "package.json"
+      - ".github/workflows/ios-ipa.yml"
+
+concurrency:
+  group: ios-ipa-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ipa:
+    name: Build unsigned IPA
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Check out the code
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Copy web files and plugins into the iOS project
+        run: npx cap sync ios
+
+      - name: Show Xcode version
+        run: xcodebuild -version
+
+      - name: Build the app without signing
+        working-directory: ios/App
+        run: |
+          xcodebuild \
+            -project App.xcodeproj \
+            -scheme App \
+            -configuration Release \
+            -sdk iphoneos \
+            -destination 'generic/platform=iOS' \
+            -archivePath "$RUNNER_TEMP/App.xcarchive" \
+            archive \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY=""
+
+      - name: Package the IPA
+        run: |
+          APP="$RUNNER_TEMP/App.xcarchive/Products/Applications/App.app"
+          test -f "$APP/public/runners/ride-check.js"
+          test -f "$APP/capacitor.config.json"
+          /usr/libexec/PlistBuddy -c "Print :BGTaskSchedulerPermittedIdentifiers" "$APP/Info.plist"
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry Ridewise.ipa Payload
+          ls -lh Ridewise.ipa
+
+      - name: Upload the IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ridewise-ipa
+          path: Ridewise.ipa
+          if-no-files-found: error
