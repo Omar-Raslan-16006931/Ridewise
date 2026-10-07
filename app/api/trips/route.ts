@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { parseReceiptEmail, type ParsedReceipt } from "../../../lib/receipt-parser";
 import { tripNotification } from "../../../lib/ride-notifications";
 import { sendNtfy } from "../../../lib/ntfy";
+import { pickField, resolvePayer } from "../../../lib/payer";
 
 const directions = new Set(["campus", "home"]);
 const tripModes = new Set(["shared", "solo"]);
@@ -120,10 +121,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "trip_mode must be 'shared' or 'solo'" }, { status: 400 });
   }
 
-  // Resolve raw payer name / UUID
-  const rawPayer = String(
-    body.paid_by ?? body.paidBy ?? body.payer ?? body.who_paid ?? body.who ?? body.rider ?? ""
-  ).trim();
+  // Who paid: accept the common spellings of the field, in the JSON body or the URL query.
+  const payerFields = ["paid_by", "payer", "who_paid", "who", "paid", "rider"];
+  const rawPayer =
+    pickField(body, payerFields) || pickField(Object.fromEntries(new URL(request.url).searchParams), payerFields);
 
   const defaultNote = parsedReceipt ? parsedReceipt.notes : "Logged via iOS Shortcut";
   const notes = body.notes ? String(body.notes).trim().slice(0, 280) : defaultNote;
@@ -132,43 +133,60 @@ export async function POST(request: Request) {
   const rideAt = rideAtStr ? new Date(String(rideAtStr)) : new Date();
   const validRideAt = isNaN(rideAt.getTime()) ? new Date() : rideAt;
 
-  // ATTEMPT 1: Try database RPC function (bypasses RLS without service role key if installed)
-  if (groupCode) {
+  const receiptSummary = parsedReceipt
+    ? { service: parsedReceipt.service, amount, direction, ride_at: validRideAt.toISOString() }
+    : undefined;
+  const summary = { amount, direction: direction as "campus" | "home", trip_mode: tripMode as "shared" | "solo", notes };
+
+  // Fallback for projects without a working service-role key: the log_shortcut_trip
+  // database function. It matches the payer itself, so `payer` should be a profile UUID
+  // whenever we already know it. Returns null when the function is not usable.
+  async function logViaDatabaseFunction(payer: string | null) {
+    if (!groupCode) return null;
     try {
       const { data: rpcData, error: rpcError } = await supabase.rpc("log_shortcut_trip", {
         p_group_code: groupCode,
         p_amount: amount,
         p_trip_mode: tripMode,
-        p_payer: rawPayer || null,
+        p_payer: payer,
         p_notes: notes,
         p_direction: direction,
       });
-
-      if (!rpcError && rpcData) {
-        if (rpcData.error || rpcData.success === false) {
-          return NextResponse.json({ error: rpcData.error }, { status: 400 });
-        }
-        const notification = tripNotification({ amount, direction: direction as "campus" | "home", trip_mode: tripMode as "shared" | "solo", notes }, rpcData.trip?.paid_by);
-        const pushed = await sendNtfy(notification);
-        return NextResponse.json({
-          success: true,
-          trip: rpcData.trip,
-          // Ready-made text for a "Show Notification" action in Shortcuts / n8n.
-          notification,
-          ntfy_sent: pushed,
-          parsed_receipt: parsedReceipt
-            ? { service: parsedReceipt.service, amount, direction, ride_at: validRideAt.toISOString() }
-            : undefined,
-        }, { status: 201 });
+      if (rpcError || !rpcData) return null;
+      if (rpcData.error || rpcData.success === false) {
+        return NextResponse.json({ error: rpcData.error }, { status: 400 });
       }
+      const notification = tripNotification(summary, rpcData.trip?.paid_by);
+      const pushed = await sendNtfy(notification);
+      return NextResponse.json(
+        { success: true, trip: rpcData.trip, notification, ntfy_sent: pushed, parsed_receipt: receiptSummary },
+        { status: 201 }
+      );
     } catch {
-      // If RPC is not present, fall through to direct tables
+      return null;
     }
   }
 
-  // ATTEMPT 2: Direct tables query (requires SUPABASE_SERVICE_ROLE_KEY or appropriate RLS permissions)
+  const isPermissionError = (err: { code?: string; message?: string } | null) =>
+    Boolean(err && (err.code === "42501" || err.message?.includes("permission denied")));
+  const permissionDenied = () =>
+    NextResponse.json(
+      {
+        error:
+          "Database permission denied (RLS). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel Environment Variables, or run the SQL function from the shortcut modal in Supabase SQL editor.",
+      },
+      { status: 500 }
+    );
+
+  // Without the service-role key the tables are locked by RLS, so go straight to the database function.
+  if (!process.env.SUPABASE_SERVICE_ROLE_KEY) {
+    const logged = await logViaDatabaseFunction(rawPayer || null);
+    if (logged) return logged;
+  }
+
+  // Main path: look the space and its members up, so the payer is matched here and never guessed.
   let groupId = String(body.group_id ?? process.env.RIDEWISE_SHORTCUT_GROUP_ID ?? "");
-  if (!groupId && groupCode) {
+  if (groupCode) {
     const { data: groupData, error: groupErr } = await supabase
       .from("ride_groups")
       .select("id")
@@ -176,23 +194,12 @@ export async function POST(request: Request) {
       .maybeSingle();
 
     if (groupErr) {
-      if (groupErr.code === "42501" || groupErr.message?.includes("permission denied")) {
-        return NextResponse.json(
-          {
-            error:
-              "Database permission denied (RLS). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel Environment Variables, or run the SQL function from the shortcut modal in Supabase SQL editor.",
-          },
-          { status: 500 }
-        );
-      }
+      if (isPermissionError(groupErr)) return (await logViaDatabaseFunction(rawPayer || null)) ?? permissionDenied();
       return NextResponse.json({ error: groupErr.message }, { status: 500 });
     }
-
     if (!groupData) {
       return NextResponse.json(
-        {
-          error: `Group code '${groupCode}' was not found. Please verify your invite code in the Space tab.`,
-        },
+        { error: `Group code '${groupCode}' was not found. Please verify your invite code in the Space tab.` },
         { status: 404 }
       );
     }
@@ -203,45 +210,32 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "group_id or group_code is required" }, { status: 400 });
   }
 
-  // Fetch members to resolve payer name / IDs
   const { data: members, error: membersError } = await supabase
     .from("ride_group_members")
     .select("user_id,display_name")
-    .eq("group_id", groupId);
+    .eq("group_id", groupId)
+    .order("joined_at");
 
   if (membersError) {
-    if (membersError.code === "42501" || membersError.message?.includes("permission denied")) {
-      return NextResponse.json(
-        {
-          error:
-            "Database permission denied (RLS). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel Environment Variables.",
-        },
-        { status: 500 }
-      );
-    }
+    if (isPermissionError(membersError)) return (await logViaDatabaseFunction(rawPayer || null)) ?? permissionDenied();
     return NextResponse.json({ error: membersError.message }, { status: 500 });
   }
-
   if (!members || members.length === 0) {
     return NextResponse.json({ error: "Group members not found" }, { status: 404 });
   }
 
-  let matchedMember = members.find(
-    (m) => m.user_id === rawPayer || m.display_name.toLowerCase() === rawPayer.toLowerCase()
-  );
-
-  if (!matchedMember && members.length > 0) {
-    matchedMember = members[0];
-  }
-
+  // A payer that was sent but matches nobody is an error. Quietly logging the ride
+  // under the first member would put the debt on the wrong person.
+  const matchedMember = rawPayer ? resolvePayer(rawPayer, members) : members[0];
   if (!matchedMember) {
-    return NextResponse.json({ error: "Valid payer member required" }, { status: 400 });
+    const names = members.map((member) => member.display_name.trim());
+    return NextResponse.json(
+      { error: `paid_by '${rawPayer}' does not match anyone in this space. Use one of: ${names.join(", ")}.`, members: names },
+      { status: 400 }
+    );
   }
 
   const payerId = matchedMember.user_id;
-  const riderId = tripMode === "solo" ? payerId : null;
-  const createdBy = payerId;
-
   const { data: trip, error } = await supabase
     .from("ride_trips")
     .insert({
@@ -250,37 +244,30 @@ export async function POST(request: Request) {
       direction,
       amount,
       trip_mode: tripMode,
-      solo_by: riderId,
+      solo_by: tripMode === "solo" ? payerId : null,
       paid_by: payerId,
-      created_by: createdBy,
+      created_by: payerId,
       notes,
     })
     .select("id,group_id,ride_at,direction,amount,trip_mode,solo_by,paid_by,created_by,notes")
     .single();
 
   if (error) {
-    if (error.code === "42501" || error.message?.includes("permission denied")) {
-      return NextResponse.json(
-        {
-          error:
-            "Database permission denied (RLS). Please add SUPABASE_SERVICE_ROLE_KEY to your Vercel Environment Variables.",
-        },
-        { status: 500 }
-      );
-    }
+    if (isPermissionError(error)) return (await logViaDatabaseFunction(payerId)) ?? permissionDenied();
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  const notification = tripNotification({ amount, direction: direction as "campus" | "home", trip_mode: tripMode as "shared" | "solo", notes }, matchedMember.display_name);
+  const notification = tripNotification(summary, matchedMember.display_name.trim());
   const pushed = await sendNtfy(notification);
 
-  return NextResponse.json({
-    success: true,
-    trip,
-    notification,
-    ntfy_sent: pushed,
-    parsed_receipt: parsedReceipt
-      ? { service: parsedReceipt.service, amount, direction, ride_at: validRideAt.toISOString() }
-      : undefined,
-  }, { status: 201 });
+  return NextResponse.json(
+    {
+      success: true,
+      trip: { ...trip, paid_by_name: matchedMember.display_name.trim() },
+      notification,
+      ntfy_sent: pushed,
+      parsed_receipt: receiptSummary,
+    },
+    { status: 201 }
+  );
 }
