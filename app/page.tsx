@@ -393,6 +393,27 @@ export default function Home() {
     notify(sent ? "Test notification coming in 6 seconds. Close the app to see it." : "Could not schedule a test notification.", sent ? "info" : "error");
   }
 
+  const [ntfyTesting, setNtfyTesting] = useState(false);
+
+  async function handleNtfyTest() {
+    if (!supabase || ntfyTesting) return;
+    setNtfyTesting(true);
+    try {
+      const { data } = await supabase.auth.getSession();
+      const res = await fetch("/api/notify/test", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${data.session?.access_token ?? ""}` },
+      });
+      const result = await res.json().catch(() => ({}));
+      if (res.ok && result.sent) notify("Test sent. Check the ntfy app on your phone.", "success");
+      else notify(result.error || "Could not send the test notification.", "error");
+    } catch {
+      notify("Could not reach the server. Check your connection.", "error");
+    } finally {
+      setNtfyTesting(false);
+    }
+  }
+
   const stats = useMemo(() => {
     const activeTrips = trips.filter((trip) => trip.trip_mode === "shared" && !trip.settled_at);
     const owedToYou = activeTrips.filter((trip) => trip.paid_by === currentUserId).reduce((sum, trip) => sum + trip.amount / 2, 0);
@@ -1872,6 +1893,24 @@ export default function Home() {
                             ? "Turned off in iPhone Settings"
                             : "Tap to allow alerts for auto-logged rides"}
                         </span>
+                      </div>
+                    </div>
+                    <span style={{ color: "var(--muted)" }}>›</span>
+                  </button>
+                )}
+
+                {supabase && user && (
+                  <button
+                    type="button"
+                    className="settings-item-btn"
+                    disabled={ntfyTesting}
+                    onClick={() => void handleNtfyTest()}
+                  >
+                    <div className="settings-item-title">
+                      <span>📣</span>
+                      <div>
+                        <div>{ntfyTesting ? "Sending…" : "Test ntfy Notification"}</div>
+                        <span className="settings-item-sub">Send a test alert to the ntfy app</span>
                       </div>
                     </div>
                     <span style={{ color: "var(--muted)" }}>›</span>
