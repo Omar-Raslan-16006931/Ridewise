@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { parseReceiptEmail, type ParsedReceipt } from "../../../lib/receipt-parser";
 import { tripNotification } from "../../../lib/ride-notifications";
+import { sendNtfy } from "../../../lib/ntfy";
 
 const directions = new Set(["campus", "home"]);
 const tripModes = new Set(["shared", "solo"]);
@@ -147,11 +148,14 @@ export async function POST(request: Request) {
         if (rpcData.error || rpcData.success === false) {
           return NextResponse.json({ error: rpcData.error }, { status: 400 });
         }
+        const notification = tripNotification({ amount, direction: direction as "campus" | "home", trip_mode: tripMode as "shared" | "solo", notes }, rpcData.trip?.paid_by);
+        const pushed = await sendNtfy(notification);
         return NextResponse.json({
           success: true,
           trip: rpcData.trip,
           // Ready-made text for a "Show Notification" action in Shortcuts / n8n.
-          notification: tripNotification({ amount, direction: direction as "campus" | "home", trip_mode: tripMode as "shared" | "solo", notes }, rpcData.trip?.paid_by),
+          notification,
+          ntfy_sent: pushed,
           parsed_receipt: parsedReceipt
             ? { service: parsedReceipt.service, amount, direction, ride_at: validRideAt.toISOString() }
             : undefined,
@@ -267,10 +271,14 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
+  const notification = tripNotification({ amount, direction: direction as "campus" | "home", trip_mode: tripMode as "shared" | "solo", notes }, matchedMember.display_name);
+  const pushed = await sendNtfy(notification);
+
   return NextResponse.json({
     success: true,
     trip,
-    notification: tripNotification({ amount, direction: direction as "campus" | "home", trip_mode: tripMode as "shared" | "solo", notes }, matchedMember.display_name),
+    notification,
+    ntfy_sent: pushed,
     parsed_receipt: parsedReceipt
       ? { service: parsedReceipt.service, amount, direction, ride_at: validRideAt.toISOString() }
       : undefined,
