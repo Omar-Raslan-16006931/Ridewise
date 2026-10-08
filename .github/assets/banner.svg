@@ -4,8 +4,8 @@
       <stop offset="0%" stop-color="#14b8a6"/><stop offset="50%" stop-color="#0ea5e9"/><stop offset="100%" stop-color="#6366f1"/>
     </linearGradient>
     <style>
-      .t{font:800 64px 'Segoe UI',Ubuntu,'Helvetica Neue',Arial,sans-serif;fill:#fff;animation:f 1.2s ease-out both}
-      .d{font:500 22px 'Segoe UI',Ubuntu,'Helvetica Neue',Arial,sans-serif;fill:#fff;opacity:.92;animation:f 1.2s .4s ease-out both}
+      .t{font:800 64px 'Segoe UI',Ubuntu,'Helvetica Neue',Arial,sans-serif;fill:#fff}
+      .d{font:500 22px 'Segoe UI',Ubuntu,'Helvetica Neue',Arial,sans-serif;fill:#fff;opacity:.92}
       .w1{animation:m 9s ease-in-out infinite alternate} .w2{animation:m 12s ease-in-out infinite alternate-reverse}
       @keyframes f{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
       @keyframes m{from{transform:translateX(0)}to{transform:translateX(-120px)}}
