@@ -2,7 +2,6 @@
 
 <img src=".github/assets/banner.svg" width="100%" alt="Ridewise"/>
 
-<img src="https://img.shields.io/github/last-commit/Omar-Raslan-16006931/Ridewise?style=for-the-badge&color=6366f1" alt="Last commit"/>
 <img src="https://img.shields.io/github/languages/top/Omar-Raslan-16006931/Ridewise?style=for-the-badge&color=0ea5e9" alt="Top language"/>
 
 <br/><br/>
