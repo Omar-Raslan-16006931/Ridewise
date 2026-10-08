@@ -1,12 +1,25 @@
-# Ridewise
+<div align="center">
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=7&height=200&section=header&text=Ridewise&fontSize=56&fontColor=ffffff&fontAlignY=36&desc=Shared%20Uber%20ledger%20with%20budgeting%20and%20spending%20analytics&descSize=16&descAlignY=58&animation=fadeIn" width="100%" alt="Ridewise"/>
+
+<img src="https://img.shields.io/github/last-commit/Omar-Raslan-16006931/Ridewise?style=for-the-badge&color=6366f1" alt="Last commit"/>
+<img src="https://img.shields.io/github/languages/top/Omar-Raslan-16006931/Ridewise?style=for-the-badge&color=0ea5e9" alt="Top language"/>
+
+<br/><br/>
+
+<img src="https://skillicons.dev/icons?i=nextjs,react,ts,supabase,vercel,apple&theme=dark" alt="Tech stack"/>
+
+</div>
+
+---
 
 A shared Uber ledger for two people: record a one-way ride, say who paid, and settle that exact half later. Every ride and reimbursement is kept as its own permanent record, so lifetime, weekly, monthly, and custom-period totals remain accurate.
 
-## Prerequisites
+## 📋 Prerequisites
 
 Use Node 22 LTS for local development and deployment (Vercel no longer builds with Node 20). Node 24 has not been tested with this project.
 
-## Set up Supabase
+## 🚀 Set up Supabase
 
 1. Create a Supabase project, then run [`supabase/schema_v2.sql`](./supabase/schema_v2.sql) once in its SQL Editor. This is the final schema: it creates shared and solo trips, settlement history, access rules, and analytics functions. Do not run the old `schema.sql` for a new project.
    If an existing project returns `404` for `settle_ride_trip`, run [`supabase/migrate_settlement_paid_by.sql`](./supabase/migrate_settlement_paid_by.sql) once in the same SQL Editor.
@@ -14,7 +27,7 @@ Use Node 22 LTS for local development and deployment (Vercel no longer builds wi
 3. Copy `.env.local.example` to `.env.local` and fill in the Project URL and publishable key from Supabase Connect.
 4. Run `npm install`, then `npm run dev`.
 
-## Deploy to Vercel
+## ☁️ Deploy to Vercel
 
 Import the `Ridewise` folder as the project root, add the variables below, and deploy with Node 22:
 
@@ -26,11 +39,11 @@ Import the `Ridewise` folder as the project root, add the variables below, and d
 
 After deployment, verify the API route with `GET https://YOUR_DOMAIN/api/trips`. It returns the accepted fields without exposing secrets.
 
-## How sharing works
+## 🧭 How sharing works
 
 The first person signs in, creates a space, and sends the eight-character invite code to the other person. Both people can then add, correct, and settle trips. Each ride is automatically split 50/50; when the other rider settles, a separate payment transaction is stored and that trip leaves the outstanding balance.
 
-## Analytics captured
+## 📊 Analytics captured
 
 - Every trip: exact timestamp, direction, cost, Uber payer, editor, and note.
 - Every settlement: the trip it clears, amount, sender, receiver, timestamp, and recorder.
@@ -96,3 +109,13 @@ The iPhone app is a thin native shell (Capacitor, in `ios/`) that opens the live
 - **Notifications:** `native/www/runners/ride-check.js` runs through iOS Background App Refresh, asks `GET /api/trips/recent` for rides created since the phone last looked, and shows a local notification for each. iOS chooses when it runs (usually within minutes to a couple of hours), and it stops if the app is swiped away in the app switcher or Background App Refresh is off. Instant push would need Apple's push service, which requires a paid developer account.
 - `POST /api/trips` also returns `notification.title` and `notification.body`, which a Shortcut can pass to a **Show Notification** action for an instant alert on the phone that logged the ride.
 - **Instant alerts with ntfy:** set `NTFY_TOPIC` in Vercel (a hard-to-guess name, for example `ridewise-` plus random letters), redeploy, then subscribe to the same topic in the ntfy app. Every ride logged through `POST /api/trips` (receipt auto-log, n8n, Shortcut) sends a push at once, even with Ridewise closed. Optional: `NTFY_SERVER` for a self-hosted server and `NTFY_TOKEN` for a protected topic. Rides added by hand inside the app do not go through this route and send no ntfy push.
+
+---
+
+<div align="center">
+
+**Made with ❤️ by [Omar Raslan](https://github.com/Omar-Raslan-16006931)**
+
+<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=7&height=100&section=footer" width="100%"/>
+
+</div>
