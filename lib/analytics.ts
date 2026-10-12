@@ -3,6 +3,37 @@ import type { Member, Trip } from "./types";
 export const BUS_BENCHMARK = 42000;
 export const EXPECTED_COLLEGE_DAYS = 4;
 
+/** College days, as JS getDay() numbers: Saturday, Sunday, Monday, Wednesday. */
+export const COLLEGE_WEEKDAYS = [6, 0, 1, 3];
+
+export function isCollegeDay(date: Date): boolean {
+  return COLLEGE_WEEKDAYS.includes(date.getDay());
+}
+
+/**
+ * College days still ahead in a week, counting today while today is not over.
+ * Missed days are simply in the past, so their budget rolls onto the days left:
+ * on Tuesday only Wednesday is left, whether or not you rode on Monday.
+ */
+export function collegeDaysLeft(weekStart: Date, weekEnd: Date, now: Date = new Date()): number {
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let count = 0;
+  for (let d = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate()); d <= weekEnd; d.setDate(d.getDate() + 1)) {
+    if (d >= today && isCollegeDay(d)) count += 1;
+  }
+  return count;
+}
+
+/** The next college day after `now` (today excluded), e.g. "Wed". */
+export function nextCollegeDayLabel(now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  for (let i = 0; i < 7; i++) {
+    d.setDate(d.getDate() + 1);
+    if (isCollegeDay(d)) return new Intl.DateTimeFormat("en", { weekday: "short" }).format(d);
+  }
+  return "";
+}
+
 export type TripSummary = {
   totalSpend: number;
   sharedTrips: number;
@@ -207,22 +238,37 @@ export function personalCollegeDaysUsed(trips: Trip[], memberId: string): number
 }
 
 /**
- * Computes today's personal commute spending, today's budget allowance, and remaining budget today.
+ * Today's personal allowance. On a college day it is what is left of the weekly
+ * budget (before today's rides) shared over the college days left, today included.
+ * So a missed day's money moves onto the remaining days. On other days it is 0.
  */
 export function computeTodayBudget(
   trips: Trip[],
   memberId: string,
   weeklyBudget: number,
-  referenceDate: Date = new Date(),
-  collegeDays = EXPECTED_COLLEGE_DAYS
+  referenceDate: Date = new Date()
 ) {
   const todayIso = toLocalDateKey(referenceDate);
   const todayTrips = trips.filter((t) => toLocalDateKey(t.ride_at) === todayIso);
   const todayActualSpend = personalTotal(todayTrips, memberId);
   const todayRidesCount = todayTrips.filter((t) => t.trip_mode === "shared" || t.solo_by === memberId).length;
-  const todayBudget = dailyBudget(weeklyBudget, collegeDays);
+
+  const { start: weekStart, end: weekEnd } = getAcademicWeekBounds(0, referenceDate);
+  const startOfToday = new Date(referenceDate.getFullYear(), referenceDate.getMonth(), referenceDate.getDate());
+  const spentBeforeToday = personalTotal(
+    trips.filter((t) => {
+      const d = new Date(t.ride_at);
+      return d >= weekStart && d < startOfToday;
+    }),
+    memberId
+  );
+
+  const collegeDay = isCollegeDay(referenceDate);
+  const daysLeft = collegeDaysLeft(weekStart, weekEnd, referenceDate);
+  const todayBudget =
+    collegeDay && daysLeft > 0 && weeklyBudget > 0 ? Math.max(0, weeklyBudget - spentBeforeToday) / daysLeft : 0;
   const todayRemaining = todayBudget - todayActualSpend;
-  const todayPct = todayBudget > 0 ? (todayActualSpend / todayBudget) * 100 : 0;
+  const todayPct = todayBudget > 0 ? (todayActualSpend / todayBudget) * 100 : todayActualSpend > 0 ? 100 : 0;
   const isOverBudget = todayRemaining < 0;
 
   return {
@@ -234,6 +280,9 @@ export function computeTodayBudget(
     todayRemaining,
     todayPct,
     isOverBudget,
+    isCollegeDay: collegeDay,
+    collegeDaysLeft: daysLeft,
+    nextCollegeDay: nextCollegeDayLabel(referenceDate),
   };
 }
 

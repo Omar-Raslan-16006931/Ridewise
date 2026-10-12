@@ -22,7 +22,6 @@ import {
   dailyBudget,
   collegeDaysUsed,
   remainingBudget,
-  remainingBudgetPerCollegeDay,
   budgetDifference,
   budgetPercentage,
   soloTotal,
@@ -45,6 +44,7 @@ import {
   personalAverageMonthlySpend,
   computeMonthlyComparisonMetrics,
   computeTodayBudget,
+  collegeDaysLeft,
   type SoloScope,
   type TrendDataPoint,
   type DailySpendPoint,
@@ -379,6 +379,29 @@ export default function Home() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
+  // Pick up new deployments: when the app comes back to the front, reload if Vercel is serving a newer build.
+  // Keeps the installed iPhone app current after every push, without a new IPA.
+  useEffect(() => {
+    const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION;
+    if (!currentVersion || currentVersion === "dev") return;
+    let checking = false;
+    const checkForUpdate = async () => {
+      if (document.visibilityState !== "visible" || checking) return;
+      checking = true;
+      try {
+        const res = await fetch("/api/version", { cache: "no-store" });
+        const { version } = (await res.json()) as { version?: string };
+        if (version && version !== "dev" && version !== currentVersion) window.location.reload();
+      } catch {
+        // Offline: keep the current version.
+      } finally {
+        checking = false;
+      }
+    };
+    document.addEventListener("visibilitychange", checkForUpdate);
+    return () => document.removeEventListener("visibilitychange", checkForUpdate);
+  }, []);
+
   async function handleNotificationSetup() {
     let permission = notificationPermission;
     if (permission === "prompt") {
@@ -507,8 +530,10 @@ export default function Home() {
     const budgetDiff = budgetDifference(personalWeekActualSpend, expectedBudgetUsed);
     const budgetPct = budgetPercentage(personalWeekActualSpend, expectedBudgetUsed);
     const remainBudget = remainingBudget(weeklyBudget, personalWeekActualSpend);
-    const remainCollegeDays = Math.max(0, EXPECTED_COLLEGE_DAYS - completedDaysCapped);
-    const remainBudgetPerDay = remainingBudgetPerCollegeDay(remainBudget, completedDaysCapped, EXPECTED_COLLEGE_DAYS);
+    // Days left come from the calendar (Sat, Sun, Mon, Wed still ahead), not from rides logged,
+    // so a missed day's budget is spread over the college days that remain.
+    const remainCollegeDays = collegeDaysLeft(weekStart, weekEnd, now);
+    const remainBudgetPerDay = remainCollegeDays > 0 ? remainBudget / remainCollegeDays : 0;
 
     let budgetStatus: "under" | "over" | "on" = "on";
     if (completedDaysCapped > 0) {
@@ -591,7 +616,7 @@ export default function Home() {
     });
 
     // Today's Budget Metrics
-    const todayMetrics = computeTodayBudget(trips, currentUserId, weeklyBudget, now, EXPECTED_COLLEGE_DAYS);
+    const todayMetrics = computeTodayBudget(trips, currentUserId, weeklyBudget, now);
 
     return {
       todayMetrics,
@@ -1055,7 +1080,16 @@ export default function Home() {
                       Today’s Allowance · {new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(new Date())}
                     </span>
                     <div className="today-budget-title">
-                      {analytics.todayMetrics.todayRemaining >= 0 ? (
+                      {!analytics.todayMetrics.isCollegeDay ? (
+                        <>
+                          <span className="today-budget-amount">No college</span>
+                          <span className="today-budget-sub">
+                            {analytics.todayMetrics.collegeDaysLeft > 0 && analytics.todayMetrics.nextCollegeDay
+                              ? `next: ${analytics.todayMetrics.nextCollegeDay}`
+                              : "week done"}
+                          </span>
+                        </>
+                      ) : analytics.todayMetrics.todayRemaining >= 0 ? (
                         <>
                           <span className="today-budget-amount">{money.format(analytics.todayMetrics.todayRemaining)}</span>
                           <span className="today-budget-sub">left today</span>
@@ -1091,7 +1125,7 @@ export default function Home() {
                 {/* 3-Part Footer Stats: Daily allowance, Spent today, Rides logged */}
                 <div className="today-budget-footer">
                   <div className="today-budget-stat">
-                    <span className="today-stat-label">Daily allowance</span>
+                    <span className="today-stat-label">Today’s allowance</span>
                     <span className="today-stat-val">
                       {money.format(analytics.todayMetrics.todayBudget)}
                     </span>
