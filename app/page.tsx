@@ -165,6 +165,9 @@ export default function Home() {
   // Analytics & Scope State
   const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>("week");
   const [weekOffset, setWeekOffset] = useState<number>(0);
+  // Which way the week view slides in after a swipe or arrow tap.
+  const [weekSlide, setWeekSlide] = useState<"next" | "prev" | null>(null);
+  const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [weeklyBudget, setWeeklyBudget] = useState<number>(700);
   const [soloScope, setSoloScope] = useState<SoloScope>("mine");
   const [activeDailyBar, setActiveDailyBar] = useState<DailySpendPoint | null>(null);
@@ -401,6 +404,69 @@ export default function Home() {
     document.addEventListener("visibilitychange", checkForUpdate);
     return () => document.removeEventListener("visibilitychange", checkForUpdate);
   }, []);
+
+  function changeWeek(step: number) {
+    setWeekSlide(step > 0 ? "next" : "prev");
+    setActiveDailyBar(null);
+    setWeekOffset((prev) => (step === 0 ? 0 : prev + step));
+  }
+
+  function jumpToCurrentWeek() {
+    setWeekSlide(weekOffset > 0 ? "prev" : "next");
+    setActiveDailyBar(null);
+    setWeekOffset(0);
+  }
+
+  // Swipe left = next week, swipe right = previous week. Ignores mostly-vertical drags (scrolling).
+  const weekSwipeHandlers = {
+    onTouchStart: (e: React.TouchEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.closest("input, select, textarea, .no-swipe")) {
+        swipeStartRef.current = null;
+        return;
+      }
+      const t = e.touches[0];
+      swipeStartRef.current = { x: t.clientX, y: t.clientY };
+    },
+    onTouchEnd: (e: React.TouchEvent) => {
+      const start = swipeStartRef.current;
+      swipeStartRef.current = null;
+      if (!start) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - start.x;
+      const dy = t.clientY - start.y;
+      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+      changeWeek(dx < 0 ? 1 : -1);
+    },
+  };
+
+  const weekPaneClass = weekSlide ? `week-slide-${weekSlide}` : "";
+
+  function renderWeekSwitcher() {
+    const weekName =
+      weekOffset === 0 ? "This week" : weekOffset === -1 ? "Last week" : weekOffset === 1 ? "Next week" : weekOffset < 0 ? `${Math.abs(weekOffset)} weeks ago` : `In ${weekOffset} weeks`;
+    return (
+      <div className="week-switcher-bar">
+        <button type="button" className="week-nav-arrow-btn" onClick={() => changeWeek(-1)} aria-label="Previous week">
+          ‹
+        </button>
+        <div className="week-switcher-center">
+          <span className="week-switcher-title">{weekName}</span>
+          <span className="week-switcher-dates">{analytics.weekLabel}</span>
+          {weekOffset !== 0 ? (
+            <button type="button" className="today-jump-btn" onClick={jumpToCurrentWeek}>
+              Back to this week
+            </button>
+          ) : (
+            <span className="week-swipe-hint">Swipe to change week</span>
+          )}
+        </div>
+        <button type="button" className="week-nav-arrow-btn" onClick={() => changeWeek(1)} aria-label="Next week">
+          ›
+        </button>
+      </div>
+    );
+  }
 
   async function handleNotificationSetup() {
     let permission = notificationPermission;
@@ -1278,35 +1344,8 @@ export default function Home() {
 
           {/* TAB 2: BUDGET (Weekly College Routine & Pacing) */}
           {activeTab === "budget" && (
-            <main className="tab-content" key="tab-budget">
-              {/* Academic Week Switcher Bar */}
-              <div className="week-switcher-bar">
-                <button
-                  type="button"
-                  className="week-nav-arrow-btn"
-                  onClick={() => setWeekOffset((prev) => prev - 1)}
-                  aria-label="Previous week"
-                >
-                  ←
-                </button>
-                <div className="week-switcher-center">
-                  <span className="week-switcher-title">College Week (Sat → Fri)</span>
-                  <span className="week-switcher-dates">{analytics.weekLabel}</span>
-                  {weekOffset !== 0 && (
-                    <button type="button" className="today-jump-btn" onClick={() => setWeekOffset(0)}>
-                      Current week
-                    </button>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="week-nav-arrow-btn"
-                  onClick={() => setWeekOffset((prev) => prev + 1)}
-                  aria-label="Next week"
-                >
-                  →
-                </button>
-              </div>
+            <main className={`tab-content ${weekPaneClass}`} key={`tab-budget-${weekOffset}`} {...weekSwipeHandlers}>
+              {renderWeekSwitcher()}
 
               {/* Hero 4-Day Budget Card: Per Person */}
               <section className="budget-hero-card">
@@ -1498,20 +1537,26 @@ export default function Home() {
 
           {/* TAB 3: TRENDS (Charts, Drawings, Visual Commuter Breakdown & Scope) */}
           {activeTab === "trends" && (
-            <main className="tab-content" key="tab-trends">
+            <main
+              className={`tab-content ${timeHorizon === "week" ? weekPaneClass : ""}`}
+              key={`tab-trends-${timeHorizon === "week" ? weekOffset : timeHorizon}`}
+              {...(timeHorizon === "week" ? weekSwipeHandlers : {})}
+            >
               {/* Time Horizon Pills */}
-              <div className="filter-bar">
+              <div className="filter-bar no-swipe">
                 {(["week", "4weeks", "3months", "lifetime"] as TimeHorizon[]).map((hz) => (
                   <button
                     key={hz}
                     type="button"
                     className={`filter-chip ${timeHorizon === hz ? "active" : ""}`}
-                    onClick={() => { setTimeHorizon(hz); setActiveDailyBar(null); }}
+                    onClick={() => { setTimeHorizon(hz); setActiveDailyBar(null); setWeekSlide(null); }}
                   >
-                    {hz === "week" ? "This Week" : hz === "4weeks" ? "4 Weeks" : hz === "3months" ? "3 Months" : "All time"}
+                    {hz === "week" ? "Week" : hz === "4weeks" ? "4 Weeks" : hz === "3months" ? "3 Months" : "All time"}
                   </button>
                 ))}
               </div>
+
+              {timeHorizon === "week" && renderWeekSwitcher()}
 
               {/* Summary Cards: Total Spent & Shared Only */}
               <div className="analytics-summary-trio">
@@ -2207,6 +2252,7 @@ function BottomSheetWindow({
   const [amount, setAmount] = useState<string>(
     editingTrip ? String(editingTrip.amount) : shortcutPreFill?.amount ? String(shortcutPreFill.amount) : ""
   );
+  const [amountBump, setAmountBump] = useState(0);
   const [paidBy, setPaidBy] = useState<string>(
     editingTrip?.paid_by ?? matchedPayer ?? user?.id ?? members[0]?.user_id ?? "omar"
   );
@@ -2303,7 +2349,7 @@ function BottomSheetWindow({
           <form onSubmit={handleSubmitRide} className="sheet-form">
             {/* Big Tactile Amount Input */}
             <div className="hero-amount-box">
-              <div className="hero-amount-wrap">
+              <div className="hero-amount-wrap" key={`amount-bump-${amountBump}`}>
                 <span className="hero-amount-curr">EGP</span>
                 <input
                   name="amount"
@@ -2315,7 +2361,8 @@ function BottomSheetWindow({
                   placeholder="0"
                   value={amount}
                   onChange={(e) => setAmount(e.target.value)}
-                  className="hero-amount-input"
+                  className={`hero-amount-input ${(amount || "").length > 5 ? "long" : ""}`}
+                  style={{ width: `${Math.max(1, (amount || "0").length) + 0.3}ch` }}
                 />
               </div>
               <div className="amount-presets">
@@ -2324,7 +2371,10 @@ function BottomSheetWindow({
                     key={preset}
                     type="button"
                     className="amount-preset-chip"
-                    onClick={() => setAmount(String(preset))}
+                    onClick={() => {
+                      setAmount(String(preset));
+                      setAmountBump((n) => n + 1);
+                    }}
                   >
                     +{preset}
                   </button>

@@ -3070,3 +3070,129 @@ html.native-ios select,
 html.native-ios textarea {
   font-size: 16px;
 }
+
+/* ========================================================
+   WEEK SWIPE + AMOUNT INPUT + EXTRA MOTION
+   ======================================================== */
+/* Week view slides in from the side you swiped toward. */
+.tab-content.week-slide-next {
+  animation: weekFromRight 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.tab-content.week-slide-prev {
+  animation: weekFromLeft 0.38s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.tab-content.week-slide-next > *,
+.tab-content.week-slide-prev > * {
+  animation: none !important;
+}
+@keyframes weekFromRight {
+  0% { opacity: 0; transform: translateX(42px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+@keyframes weekFromLeft {
+  0% { opacity: 0; transform: translateX(-42px); }
+  100% { opacity: 1; transform: translateX(0); }
+}
+.tab-content {
+  touch-action: pan-y;
+}
+
+.week-switcher-bar {
+  padding: 10px 10px;
+  border-radius: var(--radius-lg);
+  box-shadow: 0 1px 2px rgba(31, 35, 30, 0.04);
+}
+.week-nav-arrow-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  font-size: 24px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink);
+}
+.week-switcher-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+.week-switcher-title {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.3px;
+}
+.week-swipe-hint {
+  font-size: 10.5px;
+  color: var(--muted);
+  opacity: 0.8;
+}
+
+/* Amount: big number with "EGP" right next to it. */
+.hero-amount-wrap {
+  gap: 6px;
+  animation: amountPop 0.32s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.hero-amount-curr {
+  font-family: Geist, -apple-system, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: -0.5px;
+}
+.hero-amount-input,
+html.native-ios .hero-amount-input {
+  font-size: 64px;
+  font-weight: 800;
+  letter-spacing: -2.5px;
+  line-height: 1.05;
+  text-align: left;
+  min-width: 1.3ch;
+  padding: 0;
+  caret-color: #799e28;
+  font-variant-numeric: tabular-nums;
+}
+.hero-amount-input.long,
+html.native-ios .hero-amount-input.long {
+  font-size: 50px;
+}
+.hero-amount-input::placeholder {
+  color: #c9c6b8;
+}
+@keyframes amountPop {
+  0% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+
+/* Big numbers settle in. */
+.trio-value,
+.budget-stat-val,
+.today-budget-amount {
+  display: inline-block;
+  animation: numberRise 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes numberRise {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+
+/* Chart bars grow from the bottom. */
+.daily-chart-bar {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: barGrowUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tab-content,
+  .tab-content > *,
+  .hero-amount-wrap,
+  .trio-value,
+  .budget-stat-val,
+  .today-budget-amount,
+  .daily-chart-bar {
+    animation: none !important;
+  }
+}
