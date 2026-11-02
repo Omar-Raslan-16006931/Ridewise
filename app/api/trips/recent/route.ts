@@ -1,6 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-import { describeTrip } from "../../../../lib/ride-notifications";
+import { describeTrip, isAutoLogged } from "../../../../lib/ride-notifications";
 import type { Member } from "../../../../lib/types";
 
 export const dynamic = "force-dynamic";
@@ -57,11 +57,16 @@ export async function GET(request: Request) {
   if (tripsResult.error) return NextResponse.json({ error: tripsResult.error.message }, { status: 500 });
 
   const members = (membersResult.data ?? []) as Member[];
-  const trips = (tripsResult.data ?? []).map((trip) => ({
+  const rows = tripsResult.data ?? [];
+  // Rides logged through POST /api/trips already got an instant ntfy push. Announcing them
+  // again from the background check put two notifications on the phone for one ride.
+  const ntfyEnabled = Boolean(process.env.NTFY_TOPIC?.trim());
+  const cursor = rows.length > 0 ? (rows[rows.length - 1].created_at as string) : null;
+  const trips = rows.filter((trip) => !(ntfyEnabled && isAutoLogged(trip.notes as string | null))).map((trip) => ({
     id: trip.id as string,
     created_at: trip.created_at as string,
     ...describeTrip({ ...trip, amount: Number(trip.amount) }, members),
   }));
 
-  return NextResponse.json({ now: now.toISOString(), trips }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json({ now: now.toISOString(), cursor, trips }, { headers: { "Cache-Control": "no-store" } });
 }

@@ -78,7 +78,11 @@ addEventListener("checkRides", async function (resolve, reject) {
         });
       }
       CapacitorNotifications.schedule(notifications);
-      state.lastSeen = trips[trips.length - 1].created_at;
+    }
+    // The server skips rides that already got an ntfy push, so move past them using its cursor.
+    var newest = (data && data.cursor) || (trips.length > 0 ? trips[trips.length - 1].created_at : null);
+    if (newest && newest !== state.lastSeen) {
+      state.lastSeen = newest;
       CapacitorKV.set(STATE_KEY, JSON.stringify(state));
     }
     resolve();

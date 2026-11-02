@@ -4,6 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "../lib/supabase";
 import type { Member, RideGroup, Trip } from "../lib/types";
 import { describeTrip } from "../lib/ride-notifications";
+import { PULL_THRESHOLD, usePullToRefresh } from "../lib/use-pull-to-refresh";
 import {
   isNativeApp,
   getNotificationPermission,
@@ -238,6 +239,17 @@ export default function Home() {
   const tripsRef = useRef<Trip[]>(trips);
   tripsRef.current = trips;
   const hasLoadedTripsRef = useRef<boolean>(trips.length > 0);
+  // Every ride this device has already shown or announced. A ride is announced at most once,
+  // even when several refreshes race (app returning to the front fires both a visibility
+  // refresh and a Supabase SIGNED_IN event, and both used to announce the same new ride).
+  const seenTripIdsRef = useRef<Set<string>>(new Set(trips.map((trip) => trip.id)));
+  // Only one workspace load runs at a time; a request made during a load queues one follow-up.
+  const loadInFlightRef = useRef<Promise<void> | null>(null);
+  const loadQueuedRef = useRef<{ userId: string } | null>(null);
+
+  function markTripSeen(tripId: string | null | undefined) {
+    if (tripId) seenTripIdsRef.current.add(tripId);
+  }
 
   async function handleAuthSession(sessionUser: { id: string; email?: string } | null) {
     if (!sessionUser) {
@@ -246,6 +258,7 @@ export default function Home() {
       lastLoadedUserIdRef.current = null;
       try { localStorage.removeItem("ridewise_cached_user"); } catch {}
       hasLoadedTripsRef.current = false;
+      seenTripIdsRef.current = new Set();
       syncBackgroundCheck({ groupCode: "", lastSeen: null });
       return;
     }
@@ -257,7 +270,24 @@ export default function Home() {
     void loadWorkspace(sessionUser.id, !isSameUser && !group);
   }
 
-  async function loadWorkspace(userId: string, showLoading = false) {
+  async function loadWorkspace(userId: string, showLoading = false): Promise<void> {
+    if (!supabase) return;
+    if (loadInFlightRef.current) {
+      // Another load is running: run once more after it, instead of in parallel.
+      loadQueuedRef.current = { userId };
+      return loadInFlightRef.current;
+    }
+    const run = loadWorkspaceOnce(userId, showLoading).finally(() => {
+      loadInFlightRef.current = null;
+      const queued = loadQueuedRef.current;
+      loadQueuedRef.current = null;
+      if (queued) void loadWorkspace(queued.userId, false);
+    });
+    loadInFlightRef.current = run;
+    return run;
+  }
+
+  async function loadWorkspaceOnce(userId: string, showLoading: boolean) {
     if (!supabase) return;
     if (showLoading) setLoading(true);
     lastLoadedUserIdRef.current = userId;
@@ -289,9 +319,11 @@ export default function Home() {
       const newTrips = (tripsResult.data ?? []).map((trip) => ({ ...trip, amount: Number(trip.amount) })) as Trip[];
 
       // Announce rides that appeared from somewhere else (receipt auto-log, Shortcut, the other rider).
-      if (hasLoadedTripsRef.current) {
-        const knownIds = new Set(tripsRef.current.map((trip) => trip.id));
-        const arrivals = newTrips.filter((trip) => !knownIds.has(trip.id));
+      const seen = seenTripIdsRef.current;
+      for (const trip of tripsRef.current) seen.add(trip.id);
+      const arrivals = newTrips.filter((trip) => !seen.has(trip.id));
+      for (const trip of newTrips) seen.add(trip.id);
+      if (hasLoadedTripsRef.current && arrivals.length > 0) {
         if (arrivals.length > 3) {
           notify(`${arrivals.length} new rides were added.`, "info");
         } else {
@@ -991,6 +1023,12 @@ export default function Home() {
     else setModal(action);
   }
 
+  const pull = usePullToRefresh(async () => {
+    if (supabase && user) await loadWorkspace(user.id, false);
+    else await new Promise((resolve) => setTimeout(resolve, 500));
+  }, modal === null && !loading);
+  const pullProgress = Math.min(1, pull.distance / PULL_THRESHOLD);
+
   function toggleAccordion(key: keyof typeof accordionsOpen) {
     setAccordionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   }
@@ -1044,7 +1082,27 @@ export default function Home() {
         </div>
       </header>
 
+      {/* Pull-to-refresh indicator */}
+      <div
+        className={`ptr-indicator ${pull.refreshing ? "refreshing" : ""} ${pull.dragging ? "dragging" : ""} ${pullProgress >= 1 ? "armed" : ""}`}
+        style={{
+          transform: `translate(-50%, ${pull.distance - 44}px) scale(${0.6 + pullProgress * 0.4})`,
+          opacity: pull.refreshing ? 1 : pullProgress,
+        }}
+        aria-hidden={!pull.refreshing}
+        role="status"
+      >
+        <svg viewBox="0 0 24 24" width="20" height="20" style={{ transform: pull.refreshing ? undefined : `rotate(${pullProgress * 270}deg)` }}>
+          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeDasharray={`${pull.refreshing ? 42 : 56 * pullProgress} 60`} />
+        </svg>
+        {pull.refreshing && <span className="sr-only">Refreshing</span>}
+      </div>
+
       {/* Main Content Area Based on Active Tab */}
+      <div
+        className={`ptr-content ${pull.dragging ? "dragging" : ""}`}
+        style={pull.distance > 0 ? { transform: `translateY(${pull.distance}px)` } : undefined}
+      >
       {!group ? (
         <div className="onboarding-wrap">
           <div className="balance-hero-eyebrow">College Commute Ledger</div>
@@ -2084,6 +2142,7 @@ export default function Home() {
           )}
         </>
       )}
+      </div>
 
       {/* FIXED BOTTOM NAVIGATION BAR */}
       <nav className="bottom-nav-bar" aria-label="Main Navigation">
@@ -2178,7 +2237,9 @@ export default function Home() {
           }}
           hasPasskey={hasPasskey}
           onSignInPasskey={signInWithPasskey}
-          onRefreshWorkspace={async () => {
+          onRefreshWorkspace={async (knownTripId?: string) => {
+            // The sheet already showed its own "Auto-logged" toast for this ride.
+            markTripSeen(knownTripId);
             if (user) await loadWorkspace(user.id, false);
           }}
         />
@@ -2227,7 +2288,7 @@ function BottomSheetWindow({
   onSignIn: () => Promise<void>;
   hasPasskey?: boolean;
   onSignInPasskey?: () => Promise<void>;
-  onRefreshWorkspace?: () => Promise<void>;
+  onRefreshWorkspace?: (knownTripId?: string) => Promise<void>;
 }) {
   const now = new Date();
   const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -2288,7 +2349,7 @@ function BottomSheetWindow({
       notify(`Auto-logged ${svc}: EGP ${amt} (${dir === "campus" ? "To Campus" : "Going Home"})!`, "success");
       setTestReceiptText("");
       handleClose();
-      if (onRefreshWorkspace) await onRefreshWorkspace();
+      if (onRefreshWorkspace) await onRefreshWorkspace(data.trip?.id);
     } catch (err: any) {
       notify(err?.message || "Failed to auto-detect receipt.", "error");
     } finally {

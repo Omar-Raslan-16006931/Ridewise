@@ -120,7 +120,7 @@ button {
   color: var(--ink);
   border-radius: 100px;
   padding: 6px 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   display: flex;
   align-items: center;
@@ -158,7 +158,7 @@ button {
 .demo-badge {
   background: #e6e3da;
   color: var(--muted);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 6px;
@@ -214,7 +214,7 @@ button {
 
 .balance-hero-eyebrow {
   font-family: "DM Mono", monospace;
-  font-size: 10px;
+  font-size: 11px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #bed5c5;
@@ -238,7 +238,7 @@ button {
 }
 
 .balance-hero-sub {
-  font-size: 12px;
+  font-size: 13px;
   color: #a8c4b2;
   margin: 0;
 }
@@ -255,7 +255,7 @@ button {
   flex: 1;
   padding: 9px 12px;
   border-radius: var(--radius-sm);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   border: 0;
   display: flex;
@@ -311,7 +311,7 @@ button {
 
 .today-budget-eyebrow {
   font-family: "DM Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: var(--muted);
@@ -411,14 +411,14 @@ button {
 }
 
 .today-stat-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   font-weight: 500;
 }
 
 .today-stat-val {
   font-family: "DM Mono", monospace;
-  font-size: 12.5px;
+  font-size: 13.5px;
   font-weight: 700;
   color: var(--ink);
 }
@@ -451,7 +451,7 @@ button {
   border: 1px solid var(--line);
   color: var(--muted);
   border-radius: 100px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   white-space: nowrap;
   transition: all 0.15s ease;
@@ -482,7 +482,7 @@ button {
 }
 
 .section-header-meta {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -555,7 +555,7 @@ button {
 }
 
 .trip-card-meta {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -574,7 +574,7 @@ button {
 }
 
 .trip-card-split-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -584,7 +584,7 @@ button {
   justify-content: space-between;
   padding-top: 10px;
   border-top: 1px solid #f0eee7;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .trip-payer-tag {
@@ -603,7 +603,7 @@ button {
 .trip-badge-settled {
   background: #dcefd4;
   color: #23513b;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 100px;
@@ -612,7 +612,7 @@ button {
 .trip-badge-solo {
   background: #f2efe7;
   color: var(--muted);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 4px 8px;
   border-radius: 100px;
@@ -624,7 +624,7 @@ button {
   border: 0;
   border-radius: 6px;
   padding: 5px 10px;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   transition: transform 0.15s ease, background 0.15s ease;
 }
@@ -636,7 +636,7 @@ button {
   border: 0;
   background: none;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
   padding: 4px 6px;
   border-radius: 4px;
 }
@@ -715,7 +715,7 @@ button {
 
 .week-switcher-dates {
   font-family: "DM Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -725,7 +725,7 @@ button {
   color: white;
   border-radius: 100px;
   padding: 2px 8px;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   margin-top: 3px;
 }
@@ -755,7 +755,7 @@ button {
 
 .budget-hero-eyebrow {
   font-family: "DM Mono", monospace;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   color: var(--muted);
   letter-spacing: 0.08em;
@@ -772,7 +772,7 @@ button {
 
 .budget-badge {
   font-family: "DM Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   padding: 4px 10px;
   border-radius: 100px;
@@ -807,7 +807,7 @@ button {
 }
 
 .budget-stat-label {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -819,7 +819,7 @@ button {
 }
 
 .budget-stat-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -851,7 +851,7 @@ button {
   display: flex;
   justify-content: space-between;
   font-family: "DM Mono", monospace;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -932,7 +932,7 @@ button {
 .daily-day-label {
   margin-top: 6px;
   font-family: "DM Mono", monospace;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -990,7 +990,7 @@ button {
 }
 
 .accordion-trigger-preview {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1040,7 +1040,7 @@ button {
 }
 
 .matrix-quadrant-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--ink);
   display: flex;
@@ -1056,7 +1056,7 @@ button {
 }
 
 .matrix-quadrant-meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -1078,7 +1078,7 @@ button {
 }
 
 .duo-mini-title {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--ink);
 }
@@ -1090,7 +1090,7 @@ button {
 }
 
 .duo-mini-meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -1111,7 +1111,7 @@ button {
 }
 
 .sharing-savings-header b {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--green);
 }
 
@@ -1122,7 +1122,7 @@ button {
 }
 
 .sharing-savings-banner small {
-  font-size: 11px;
+  font-size: 12px;
   color: #3b5f33;
 }
 
@@ -1165,7 +1165,7 @@ button {
   display: flex;
   justify-content: space-between;
   font-family: "DM Mono", monospace;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -1173,7 +1173,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
   border-top: 1px solid var(--line);
   padding-top: 10px;
 }
@@ -1203,7 +1203,7 @@ button {
   border: 1px solid var(--line);
   border-radius: var(--radius-sm);
   padding: 10px 12px;
-  font-size: 12px;
+  font-size: 13px;
   line-height: 1.4;
   color: var(--ink);
   display: flex;
@@ -1264,7 +1264,7 @@ button {
 }
 
 .split-member-share {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 
@@ -1318,7 +1318,7 @@ button {
   border: 0;
   border-radius: var(--radius-sm);
   padding: 8px 14px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   transition: transform 0.15s ease;
 }
@@ -1358,7 +1358,7 @@ button {
 }
 
 .settings-item-sub {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 
@@ -1411,7 +1411,7 @@ button {
 }
 
 .nav-tab-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   letter-spacing: -0.2px;
 }
@@ -1466,7 +1466,7 @@ button {
 
 .trio-label {
   font-family: "DM Mono", monospace;
-  font-size: 9.5px;
+  font-size: 10.5px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--muted);
@@ -1495,7 +1495,7 @@ button {
 }
 
 .trio-sub {
-  font-size: 9.5px;
+  font-size: 10.5px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -1690,7 +1690,7 @@ button {
   color: var(--ink);
   border-radius: 100px;
   padding: 5px 12px;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   transition: transform 0.15s ease, background 0.15s ease;
 }
@@ -1706,7 +1706,7 @@ button {
 }
 
 .segmented-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -1801,7 +1801,7 @@ button {
   border-radius: var(--radius-md);
   background: rgba(31, 35, 30, 0.94);
   color: #fff;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -1911,7 +1911,7 @@ button {
 }
 
 .solo-scope-label {
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--muted);
   text-transform: uppercase;
@@ -1930,7 +1930,7 @@ button {
 .solo-scope-chip {
   border: 0;
   background: none;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--muted);
   padding: 5px 12px;
@@ -1979,7 +1979,7 @@ button {
 }
 
 .trend-chart-subtitle {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
   margin-top: 2px;
   display: block;
@@ -1998,7 +1998,7 @@ button {
 }
 
 .trend-chart-stat-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   font-family: "DM Mono", monospace;
 }
@@ -2038,7 +2038,7 @@ button {
   color: #fff;
   padding: 6px 12px;
   border-radius: 8px;
-  font-size: 11px;
+  font-size: 12px;
   display: flex;
   gap: 8px;
   align-items: center;
@@ -2121,7 +2121,7 @@ button {
 }
 
 .commute-route-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--ink);
   white-space: nowrap;
@@ -2141,7 +2141,7 @@ button {
 }
 
 .commute-route-meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   display: flex;
   justify-content: space-between;
@@ -2201,7 +2201,7 @@ button {
 }
 
 .monthly-runrate-hero-label {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -2217,14 +2217,14 @@ button {
 }
 
 .monthly-runrate-hero-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
 .monthly-pacing-tag {
   background: var(--ink);
   color: var(--lime);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 4px 10px;
   border-radius: 6px;
@@ -2289,7 +2289,7 @@ button {
   margin-bottom: 4px;
   background: #1f2937;
   color: #f9fafb;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   padding: 2px 6px;
   border-radius: 4px;
@@ -2326,7 +2326,7 @@ button {
 }
 
 .payer-split-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -2340,7 +2340,7 @@ button {
 }
 
 .payer-split-pct {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
 }
 
@@ -2379,7 +2379,7 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--ink);
 }
 
@@ -2391,7 +2391,7 @@ button {
   border: 0;
   background: var(--ink);
   color: var(--lime);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   padding: 5px 12px;
   border-radius: 999px;
@@ -2471,7 +2471,7 @@ button {
 
 .pulse-cell-day {
   font-family: "DM Mono", monospace;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -2516,7 +2516,7 @@ button {
 }
 
 .pulse-cell-amount {
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--muted);
   font-family: "DM Mono", monospace;
@@ -2558,7 +2558,7 @@ button {
 }
 
 .day-inspector-tag {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   padding: 3px 8px;
   border-radius: 999px;
@@ -2593,7 +2593,7 @@ button {
 }
 
 .day-inspector-metric-label {
-  font-size: 9px;
+  font-size: 10.5px;
   font-family: "DM Mono", monospace;
   color: var(--muted);
   text-transform: uppercase;
@@ -2620,7 +2620,7 @@ button {
   border: 1px solid #eeebe3;
   border-radius: 8px;
   padding: 8px 10px;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 /* ========================================================
@@ -2636,7 +2636,7 @@ button {
 }
 
 .bus-member-split-title {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -2661,7 +2661,7 @@ button {
 }
 
 .bus-member-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   text-transform: uppercase;
@@ -2676,7 +2676,7 @@ button {
 }
 
 .bus-member-sub {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   margin-top: 2px;
 }
@@ -2699,7 +2699,7 @@ button {
 .bus-member-progress-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--muted);
   font-family: "DM Mono", monospace;
@@ -2791,7 +2791,7 @@ button {
 }
 
 .daily-pulse-target-tag {
-  font-size: 9px;
+  font-size: 10.5px;
   font-family: "DM Mono", monospace;
   color: #71786e;
   background: #ffffff;
@@ -2825,7 +2825,7 @@ button {
 }
 
 .daily-pulse-val-label {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   font-family: "DM Mono", monospace;
   color: var(--ink);
@@ -2874,7 +2874,7 @@ button {
 }
 
 .daily-pulse-day-badge {
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   color: var(--muted);
   font-family: "DM Mono", monospace;
@@ -2899,7 +2899,7 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 12px;
+  font-size: 13px;
   animation: cardGlideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -2932,7 +2932,7 @@ button {
 }
 
 .monthly-compare-label {
-  font-size: 9px;
+  font-size: 10.5px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.04em;
@@ -2960,7 +2960,7 @@ button {
 }
 
 .monthly-compare-sub {
-  font-size: 9px;
+  font-size: 10.5px;
   color: var(--muted);
   white-space: nowrap;
   overflow: hidden;
@@ -3125,7 +3125,7 @@ html.native-ios textarea {
   letter-spacing: -0.3px;
 }
 .week-swipe-hint {
-  font-size: 10.5px;
+  font-size: 11.5px;
   color: var(--muted);
   opacity: 0.8;
 }
@@ -3195,4 +3195,413 @@ html.native-ios .hero-amount-input.long {
   .daily-chart-bar {
     animation: none !important;
   }
+}
+
+/* ========================================================
+   POLISH LAYER — motion system, type, spacing, touch targets
+   (kept last so it wins over the older per-component rules)
+   ======================================================== */
+:root {
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.64, 1);
+  --dur-press: 110ms;
+  --dur-fast: 180ms;
+  --dur: 280ms;
+  --focus-ring: 0 0 0 3px rgba(121, 158, 40, 0.35);
+}
+
+/* Type: smoother rendering, steadier numbers, comfortable line height. */
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
+}
+.balance-hero-amount,
+.trip-card-amount,
+.trio-value,
+.budget-stat-val,
+.today-budget-amount,
+.hero-amount-input {
+  font-variant-numeric: tabular-nums;
+}
+.section-header-title {
+  font-size: 18px;
+  letter-spacing: -0.5px;
+}
+.balance-hero-title {
+  font-size: 16.5px;
+}
+.balance-hero-amount {
+  font-size: 44px;
+  letter-spacing: -1.8px;
+  margin: 6px 0 10px;
+}
+.trip-card-title {
+  font-size: 15px;
+}
+.trip-card-amount {
+  font-size: 17px;
+}
+.toast-card {
+  font-size: 13.5px;
+  line-height: 1.35;
+  padding: 12px 14px;
+  gap: 12px;
+}
+
+/* Spacing: a little more air between and inside cards. */
+.app-topbar {
+  height: calc(62px + env(safe-area-inset-top, 0px));
+  padding-left: 20px;
+  padding-right: 20px;
+}
+.tab-content {
+  padding: 20px 18px 32px;
+  gap: 20px;
+}
+.balance-hero-card {
+  padding: 26px 22px 22px;
+  border-radius: 24px;
+}
+.balance-hero-actions {
+  gap: 10px;
+  margin-top: 20px;
+}
+.today-budget-card {
+  padding: 18px 20px;
+  gap: 14px;
+}
+.trip-list {
+  gap: 12px;
+}
+.trip-card {
+  padding: 16px 18px;
+  gap: 12px;
+  border-radius: 16px;
+}
+.trio-card {
+  padding: 14px 14px;
+  gap: 4px;
+}
+.analytics-summary-trio {
+  gap: 12px;
+}
+.filter-bar {
+  gap: 8px;
+}
+.onboarding-wrap {
+  padding-left: 24px;
+  padding-right: 24px;
+}
+
+/* Touch targets: at least 40–44px for anything tappable. */
+.hero-action-btn {
+  min-height: 44px;
+  padding: 11px 14px;
+  font-size: 13.5px;
+  border-radius: 12px;
+}
+.filter-chip {
+  min-height: 36px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+.trip-settle-btn {
+  min-height: 34px;
+  padding-left: 14px;
+  padding-right: 14px;
+}
+.trip-action-icon-btn {
+  min-width: 34px;
+  min-height: 34px;
+}
+.space-pill-btn {
+  padding: 7px 13px;
+  font-size: 13px;
+}
+.avatar-btn {
+  width: 34px;
+  height: 34px;
+  font-size: 14px;
+}
+.sheet-submit-btn {
+  min-height: 52px;
+  font-size: 16px;
+  letter-spacing: -0.2px;
+}
+
+/* Buttons: one consistent feel. Quick, gentle press; springy release. */
+button,
+.btn,
+.filter-chip,
+.trip-card,
+.solo-scope-chip {
+  transition:
+    transform var(--dur) var(--ease-spring),
+    background-color var(--dur-fast) var(--ease-out),
+    background var(--dur-fast) var(--ease-out),
+    box-shadow var(--dur) var(--ease-out),
+    color var(--dur-fast) ease,
+    border-color var(--dur-fast) ease,
+    opacity var(--dur-fast) ease;
+}
+button:active,
+.btn:active,
+.filter-chip:active,
+.solo-scope-chip:active {
+  transform: scale(0.96) !important;
+  transition: transform var(--dur-press) var(--ease-out) !important;
+}
+/* Big surfaces barely move; small icons move a bit more. */
+.sheet-submit-btn:active,
+.hero-action-btn:active,
+.week-switcher-bar button.today-jump-btn:active {
+  transform: scale(0.975) !important;
+}
+.trip-card:active {
+  transform: scale(0.99) !important;
+  transition: transform var(--dur-press) var(--ease-out) !important;
+}
+.nav-tab-btn:active,
+.avatar-btn:active,
+.trip-action-icon-btn:active,
+.week-nav-arrow-btn:active,
+.toast-dismiss:active {
+  transform: scale(0.88) !important;
+}
+.nav-fab-btn:active {
+  transform: scale(0.9) translateY(2px) !important;
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+button:disabled:active {
+  transform: none !important;
+}
+
+/* Keyboard focus is visible; taps don't leave rings behind. */
+button:focus-visible,
+.filter-chip:focus-visible,
+a:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  box-shadow: var(--focus-ring);
+}
+
+/* Mouse/trackpad only: a subtle lift on hover. */
+@media (hover: hover) and (pointer: fine) {
+  .sheet-submit-btn:hover,
+  .hero-action-btn:hover,
+  .nav-fab-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 8px 20px rgba(31, 35, 30, 0.16);
+  }
+  .trip-card:hover {
+    border-color: #cfcbb9;
+    box-shadow: 0 6px 18px rgba(36, 66, 52, 0.07);
+  }
+  .filter-chip:hover:not(.active) {
+    border-color: #cfcbb9;
+    color: var(--ink);
+  }
+}
+
+/* Bottom nav: animated pill behind the active tab, icon pops when selected. */
+.bottom-nav-bar {
+  height: calc(66px + env(safe-area-inset-bottom, 16px));
+}
+.nav-tab-btn {
+  position: relative;
+  gap: 4px;
+}
+.nav-tab-btn::before {
+  content: "";
+  position: absolute;
+  top: 7px;
+  left: 50%;
+  width: 52px;
+  height: 30px;
+  border-radius: 100px;
+  background: var(--green-subtle);
+  transform: translateX(-50%) scale(0.4);
+  opacity: 0;
+  transition: transform var(--dur) var(--ease-spring), opacity var(--dur-fast) ease;
+  z-index: -1;
+}
+.nav-tab-btn.active::before {
+  transform: translateX(-50%) scale(1);
+  opacity: 1;
+}
+.nav-tab-icon {
+  font-size: 19px;
+  transition: transform var(--dur) var(--ease-spring);
+}
+.nav-tab-btn.active .nav-tab-icon {
+  animation: navIconPop 0.42s var(--ease-spring);
+}
+.nav-tab-label {
+  font-size: 11px;
+  transition: color var(--dur-fast) ease, font-weight var(--dur-fast) ease;
+}
+.nav-tab-btn.active .nav-tab-label {
+  font-weight: 700;
+}
+@keyframes navIconPop {
+  0% { transform: scale(0.8) translateY(2px); }
+  60% { transform: scale(1.12) translateY(-1px); }
+  100% { transform: scale(1) translateY(0); }
+}
+.nav-fab-btn {
+  width: 52px;
+  height: 52px;
+  margin-top: -16px;
+}
+
+/* Pages: every section eases in, staggered top to bottom. */
+.tab-content {
+  animation: tabSlideGlide 0.34s var(--ease-out) both;
+}
+.tab-content > * {
+  animation: cardGlideUp 0.44s var(--ease-out) both;
+}
+.tab-content > *:nth-child(7) { animation-delay: 0.27s; }
+.tab-content > *:nth-child(8) { animation-delay: 0.31s; }
+.tab-content > *:nth-child(n + 9) { animation-delay: 0.34s; }
+.trip-list > * {
+  animation: cardGlideUp 0.4s var(--ease-out) both;
+}
+.trip-list > *:nth-child(1) { animation-delay: 0.08s; }
+.trip-list > *:nth-child(2) { animation-delay: 0.11s; }
+.trip-list > *:nth-child(3) { animation-delay: 0.14s; }
+.trip-list > *:nth-child(4) { animation-delay: 0.17s; }
+.trip-list > *:nth-child(5) { animation-delay: 0.2s; }
+.trip-list > *:nth-child(n + 6) { animation-delay: 0.22s; }
+.onboarding-wrap > * {
+  animation: cardGlideUp 0.5s var(--ease-out) both;
+}
+.onboarding-wrap > *:nth-child(2) { animation-delay: 0.06s; }
+.onboarding-wrap > *:nth-child(3) { animation-delay: 0.12s; }
+.onboarding-wrap > *:nth-child(4) { animation-delay: 0.18s; }
+
+/* Loading screen fades in instead of flashing. */
+.loading-screen {
+  animation: backdropFadeIn 0.3s ease both;
+}
+
+/* Pull-to-refresh */
+.ptr-content {
+  transition: transform 0.38s var(--ease-out);
+  will-change: transform;
+}
+.ptr-content.dragging {
+  transition: none;
+}
+.ptr-indicator {
+  position: fixed;
+  top: calc(62px + env(safe-area-inset-top, 0px));
+  left: 50%;
+  z-index: 25;
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--cream);
+  border: 1px solid var(--line);
+  box-shadow: 0 6px 16px rgba(31, 35, 30, 0.12);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: transform 0.38s var(--ease-out), opacity 0.25s ease, color 0.2s ease, background 0.2s ease;
+}
+.ptr-indicator.dragging {
+  transition: color 0.2s ease, background 0.2s ease;
+}
+.ptr-indicator.armed,
+.ptr-indicator.refreshing {
+  color: var(--green);
+}
+.ptr-indicator svg {
+  transition: transform 0.08s linear;
+}
+.ptr-indicator.refreshing svg {
+  animation: spin 0.8s linear infinite;
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Fit fixes for the larger type */
+.budget-badge {
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.trend-chart-stat-sub {
+  white-space: nowrap;
+}
+.commute-route-title {
+  font-size: 12.5px;
+}
+.settings-item-btn {
+  text-align: left;
+  gap: 12px;
+  padding: 16px 18px;
+}
+.settings-item-title {
+  align-items: flex-start;
+  gap: 12px;
+  min-width: 0;
+}
+.settings-item-sub {
+  display: block;
+  margin-top: 2px;
+  line-height: 1.35;
+}
+/* Filter chips stay on one line and scroll sideways instead of wrapping. */
+.filter-bar {
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  scrollbar-width: none;
+  margin: 0 -18px;
+  padding: 2px 18px;
+  width: auto;
+  touch-action: pan-x pan-y;
+}
+.filter-bar::-webkit-scrollbar {
+  display: none;
+}
+.filter-chip {
+  flex-shrink: 0;
+}
+.commute-route-title {
+  white-space: normal;
+  line-height: 1.2;
+}
+.settings-item-sub {
+  font-weight: 400;
 }
