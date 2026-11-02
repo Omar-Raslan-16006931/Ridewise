@@ -3495,13 +3495,9 @@ textarea:focus-visible {
   animation: backdropFadeIn 0.3s ease both;
 }
 
-/* Pull-to-refresh */
-.ptr-content {
-  transition: transform 0.38s var(--ease-out);
-  will-change: transform;
-}
+/* Pull-to-refresh (positions are written by lib/use-pull-to-refresh.ts each frame) */
 .ptr-content.dragging {
-  transition: none;
+  will-change: transform;
 }
 .ptr-indicator {
   position: fixed;
@@ -3519,20 +3515,26 @@ textarea:focus-visible {
   align-items: center;
   justify-content: center;
   pointer-events: none;
-  transition: transform 0.38s var(--ease-out), opacity 0.25s ease, color 0.2s ease, background 0.2s ease;
-}
-.ptr-indicator.dragging {
-  transition: color 0.2s ease, background 0.2s ease;
+  opacity: 0;
+  transform: translate3d(-50%, -44px, 0) scale(0.6);
+  will-change: transform, opacity;
+  backface-visibility: hidden;
 }
 .ptr-indicator.armed,
 .ptr-indicator.refreshing {
   color: var(--green);
 }
-.ptr-indicator svg {
-  transition: transform 0.08s linear;
+.ptr-indicator circle {
+  transform-origin: 12px 12px;
+  stroke-dasharray: 0 57;
+}
+.ptr-indicator.refreshing circle {
+  stroke-dasharray: 40 57 !important;
+  transform: none !important;
+  transition: stroke-dasharray 0.2s ease;
 }
 .ptr-indicator.refreshing svg {
-  animation: spin 0.8s linear infinite;
+  animation: spin 0.75s linear infinite;
 }
 .sr-only {
   position: absolute;

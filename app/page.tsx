@@ -4,7 +4,7 @@ import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import { getSupabase } from "../lib/supabase";
 import type { Member, RideGroup, Trip } from "../lib/types";
 import { describeTrip } from "../lib/ride-notifications";
-import { PULL_THRESHOLD, usePullToRefresh } from "../lib/use-pull-to-refresh";
+import { usePullToRefresh } from "../lib/use-pull-to-refresh";
 import {
   isNativeApp,
   getNotificationPermission,
@@ -1027,7 +1027,6 @@ export default function Home() {
     if (supabase && user) await loadWorkspace(user.id, false);
     else await new Promise((resolve) => setTimeout(resolve, 500));
   }, modal === null && !loading);
-  const pullProgress = Math.min(1, pull.distance / PULL_THRESHOLD);
 
   function toggleAccordion(key: keyof typeof accordionsOpen) {
     setAccordionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -1082,27 +1081,21 @@ export default function Home() {
         </div>
       </header>
 
-      {/* Pull-to-refresh indicator */}
+      {/* Pull-to-refresh indicator (moved directly by the pull hook, outside React renders) */}
       <div
-        className={`ptr-indicator ${pull.refreshing ? "refreshing" : ""} ${pull.dragging ? "dragging" : ""} ${pullProgress >= 1 ? "armed" : ""}`}
-        style={{
-          transform: `translate(-50%, ${pull.distance - 44}px) scale(${0.6 + pullProgress * 0.4})`,
-          opacity: pull.refreshing ? 1 : pullProgress,
-        }}
+        ref={pull.indicatorRef}
+        className={`ptr-indicator ${pull.refreshing ? "refreshing" : ""}`}
         aria-hidden={!pull.refreshing}
         role="status"
       >
-        <svg viewBox="0 0 24 24" width="20" height="20" style={{ transform: pull.refreshing ? undefined : `rotate(${pullProgress * 270}deg)` }}>
-          <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeDasharray={`${pull.refreshing ? 42 : 56 * pullProgress} 60`} />
+        <svg viewBox="0 0 24 24" width="20" height="20">
+          <circle ref={pull.arcRef} cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
         {pull.refreshing && <span className="sr-only">Refreshing</span>}
       </div>
 
       {/* Main Content Area Based on Active Tab */}
-      <div
-        className={`ptr-content ${pull.dragging ? "dragging" : ""}`}
-        style={pull.distance > 0 ? { transform: `translateY(${pull.distance}px)` } : undefined}
-      >
+      <div ref={pull.contentRef} className="ptr-content">
       {!group ? (
         <div className="onboarding-wrap">
           <div className="balance-hero-eyebrow">College Commute Ledger</div>
