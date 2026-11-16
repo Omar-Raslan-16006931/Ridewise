@@ -808,3 +808,223 @@ export function computeMonthlyComparisonMetrics(
   };
 }
 
+
+/* ---------------------------------------------------------------------------
+ * Month-by-month history
+ * ------------------------------------------------------------------------- */
+
+export type MonthDayPoint = {
+  day: number;
+  isoDate: string;
+  /** This member's share of the day's rides. */
+  amount: number;
+  campusAmount: number;
+  homeAmount: number;
+  rides: number;
+  isCollegeDay: boolean;
+  isToday: boolean;
+  isFuture: boolean;
+};
+
+export type MonthSummary = {
+  /** "2026-11" */
+  key: string;
+  year: number;
+  /** 0-based, like Date#getMonth(). */
+  month: number;
+  label: string;
+  shortLabel: string;
+  isCurrent: boolean;
+  /** Every ride in the space this month. */
+  rides: number;
+  /** Rides this member was on (shared rides + their own solo rides). */
+  myRides: number;
+  groupSpend: number;
+  mySpend: number;
+  mySharedSpend: number;
+  mySoloSpend: number;
+  campusSpend: number;
+  homeSpend: number;
+  campusRides: number;
+  homeRides: number;
+  sharedRides: number;
+  soloRides: number;
+  /** Full fares this member paid Uber up front. */
+  paidByMe: number;
+  paidByOthers: number;
+  activeDays: number;
+  avgPerRide: number;
+  avgPerActiveDay: number;
+  /** What sharing saved this member compared with riding alone. */
+  sharingSaved: number;
+  biggestRide: Trip | null;
+  busiestDay: MonthDayPoint | null;
+  days: MonthDayPoint[];
+  /** Newest first. */
+  trips: Trip[];
+};
+
+export function monthKeyOf(dateInput: Date | string): string {
+  const d = typeof dateInput === "string" ? new Date(dateInput) : dateInput;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+function isMemberOnTrip(trip: Trip, memberId: string): boolean {
+  return trip.trip_mode === "shared" || trip.solo_by === memberId;
+}
+
+/** Summary of one calendar month for one member. */
+export function summarizeMonth(
+  allTrips: Trip[],
+  memberId: string,
+  year: number,
+  month: number,
+  now: Date = new Date()
+): MonthSummary {
+  const first = new Date(year, month, 1);
+  const key = monthKeyOf(first);
+  const trips = (allTrips || [])
+    .filter((t) => t && t.ride_at && monthKeyOf(t.ride_at) === key)
+    .sort((a, b) => new Date(b.ride_at).getTime() - new Date(a.ride_at).getTime());
+  const mine = trips.filter((t) => isMemberOnTrip(t, memberId));
+  const todayIso = toLocalDateKey(now);
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const days: MonthDayPoint[] = Array.from({ length: daysInMonth }, (_, i) => {
+    const date = new Date(year, month, i + 1);
+    const isoDate = toLocalDateKey(date);
+    const dayTrips = mine.filter((t) => toLocalDateKey(t.ride_at) === isoDate);
+    const campusAmount = dayTrips.filter((t) => t.direction === "campus").reduce((s, t) => s + memberTripSpend(t, memberId), 0);
+    const homeAmount = dayTrips.filter((t) => t.direction === "home").reduce((s, t) => s + memberTripSpend(t, memberId), 0);
+    return {
+      day: i + 1,
+      isoDate,
+      amount: campusAmount + homeAmount,
+      campusAmount,
+      homeAmount,
+      rides: dayTrips.length,
+      isCollegeDay: isCollegeDay(date),
+      isToday: isoDate === todayIso,
+      isFuture: isoDate > todayIso,
+    };
+  });
+
+  const mySpend = personalTotal(trips, memberId);
+  const activeDays = days.filter((d) => d.rides > 0).length;
+  const shared = trips.filter((t) => t.trip_mode === "shared");
+  const mySolo = trips.filter((t) => t.trip_mode === "solo" && t.solo_by === memberId);
+  const campus = mine.filter((t) => t.direction === "campus");
+  const home = mine.filter((t) => t.direction === "home");
+  const biggestRide = mine.reduce<Trip | null>(
+    (top, t) => (!top || memberTripSpend(t, memberId) > memberTripSpend(top, memberId) ? t : top),
+    null
+  );
+  const busiestDay = days.reduce<MonthDayPoint | null>((top, d) => (d.amount > 0 && (!top || d.amount > top.amount) ? d : top), null);
+
+  return {
+    key,
+    year,
+    month,
+    label: first.toLocaleDateString("en", { month: "long", year: "numeric" }),
+    shortLabel: first.toLocaleDateString("en", { month: "short" }),
+    isCurrent: key === monthKeyOf(now),
+    rides: trips.length,
+    myRides: mine.length,
+    groupSpend: weeklyTotal(trips),
+    mySpend,
+    mySharedSpend: sharedTotal(trips) / 2,
+    mySoloSpend: weeklyTotal(mySolo),
+    campusSpend: campus.reduce((s, t) => s + memberTripSpend(t, memberId), 0),
+    homeSpend: home.reduce((s, t) => s + memberTripSpend(t, memberId), 0),
+    campusRides: campus.length,
+    homeRides: home.length,
+    sharedRides: shared.length,
+    soloRides: mySolo.length,
+    paidByMe: weeklyTotal(trips.filter((t) => t.paid_by === memberId)),
+    paidByOthers: weeklyTotal(trips.filter((t) => t.paid_by !== memberId)),
+    activeDays,
+    avgPerRide: mine.length > 0 ? mySpend / mine.length : 0,
+    avgPerActiveDay: activeDays > 0 ? mySpend / activeDays : 0,
+    sharingSaved: sharedRideSavings(trips),
+    biggestRide,
+    busiestDay,
+    days,
+    trips,
+  };
+}
+
+/**
+ * Every month from the first logged ride up to the current month, oldest first.
+ * Months without rides are included so the timeline has no gaps. Always has the current month.
+ */
+export function computeMonthlyHistory(trips: Trip[], memberId: string, now: Date = new Date()): MonthSummary[] {
+  const valid = (trips || []).filter((t) => t && t.ride_at && !isNaN(new Date(t.ride_at).getTime()));
+  let cursor = new Date(now.getFullYear(), now.getMonth(), 1);
+  for (const t of valid) {
+    const d = new Date(t.ride_at);
+    const start = new Date(d.getFullYear(), d.getMonth(), 1);
+    if (start < cursor) cursor = start;
+  }
+  // Rides dated in the future (a mistyped date) still get a month.
+  let last = new Date(now.getFullYear(), now.getMonth(), 1);
+  for (const t of valid) {
+    const d = new Date(t.ride_at);
+    const start = new Date(d.getFullYear(), d.getMonth(), 1);
+    if (start > last) last = start;
+  }
+  const months: MonthSummary[] = [];
+  for (let d = new Date(cursor); d <= last; d = new Date(d.getFullYear(), d.getMonth() + 1, 1)) {
+    months.push(summarizeMonth(valid, memberId, d.getFullYear(), d.getMonth(), now));
+  }
+  return months;
+}
+
+/** This member's spending from the 1st up to and including `day` of the month. */
+export function spendThroughDay(summary: MonthSummary, day: number): number {
+  return summary.days.filter((d) => d.day <= day).reduce((s, d) => s + d.amount, 0);
+}
+
+export type MonthProjection = {
+  elapsedCollegeDays: number;
+  totalCollegeDays: number;
+  /** Month-end estimate at the current pace per college day. Equals mySpend for finished months. */
+  projected: number;
+};
+
+/** Estimates where the current month will end, using the pace per college day so far. */
+export function projectMonthSpend(summary: MonthSummary, now: Date = new Date()): MonthProjection {
+  const totalCollegeDays = summary.days.filter((d) => d.isCollegeDay).length;
+  if (!summary.isCurrent) {
+    return { elapsedCollegeDays: totalCollegeDays, totalCollegeDays, projected: summary.mySpend };
+  }
+  const today = now.getDate();
+  const elapsedCollegeDays = summary.days.filter((d) => d.isCollegeDay && d.day <= today).length;
+  const projected = elapsedCollegeDays > 0 ? (summary.mySpend / elapsedCollegeDays) * totalCollegeDays : summary.mySpend;
+  return { elapsedCollegeDays, totalCollegeDays, projected: Math.max(projected, summary.mySpend) };
+}
+
+export type MonthComparison = {
+  /** Spending this month minus the baseline. Negative means spending less. */
+  diff: number;
+  pct: number;
+  baseline: number;
+  /** True when comparing against the same day-of-month in the previous month (month still running). */
+  samePoint: boolean;
+};
+
+/**
+ * Compares a month with the one before it. A month still in progress is compared with
+ * the previous month up to the same day, so a half-finished month is not flattered.
+ */
+export function compareWithPreviousMonth(
+  current: MonthSummary,
+  previous: MonthSummary | null | undefined,
+  now: Date = new Date()
+): MonthComparison | null {
+  if (!previous) return null;
+  const samePoint = current.isCurrent;
+  const baseline = samePoint ? spendThroughDay(previous, now.getDate()) : previous.mySpend;
+  if (baseline <= 0) return null;
+  const diff = current.mySpend - baseline;
+  return { diff, pct: (diff / baseline) * 100, baseline, samePoint };
+}
