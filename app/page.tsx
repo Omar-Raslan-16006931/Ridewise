@@ -16,79 +16,50 @@ import {
   type NotificationPermission,
 } from "../lib/native";
 import {
-  BUS_BENCHMARK,
   EXPECTED_COLLEGE_DAYS,
   getAcademicWeekBounds,
-  weeklyTotal,
   dailyBudget,
-  collegeDaysUsed,
   remainingBudget,
-  budgetDifference,
-  budgetPercentage,
-  soloTotal,
-  sharedTotal,
   personalTotal,
-  personalCollegeDaysUsed,
-  memberTripSpend,
-  busBenchmarkSavings,
-  busBenchmarkPercentageUsed,
-  busBenchmarkPercentageSaved,
-  sharedRideSavings,
-  compute2x2Matrix,
   computeSpendingByDay,
-  generateFactualInsights,
   toLocalDateKey,
-  filterSoloTrips,
-  computeSpendingTrend,
-  computeDailySpendingSeries,
-  personalAverageWeeklySpend,
-  personalAverageMonthlySpend,
-  computeMonthlyComparisonMetrics,
   computeTodayBudget,
   collegeDaysLeft,
-  type SoloScope,
-  type TrendDataPoint,
-  type DailySpendPoint,
-  type MonthlyComparisonMetrics,
+  computeMonthlyHistory,
 } from "../lib/analytics";
+import { buildDemoTrips, demoGroup, demoMembers } from "../lib/demo";
+import { egp } from "./ui/format";
+import { Icon } from "./ui/icons";
+import { TodayTab, type WeekView } from "./ui/TodayTab";
+import { RidesTab, type RidesFilter } from "./ui/RidesTab";
+import { MonthsTab } from "./ui/MonthsTab";
+import { SpaceTab } from "./ui/SpaceTab";
+import { Sheet, type SheetKind } from "./ui/Sheet";
 
-const demoGroup: RideGroup = { id: "demo-group", name: "Omar + Khaled", invite_code: "RIDE2026" };
-const demoMembers: Member[] = [
-  { user_id: "omar", display_name: "Omar" },
-  { user_id: "khaled", display_name: "Khaled" },
-];
-const demoTrips: Trip[] = [
-  { id: "1", ride_at: "2026-09-12T07:42:00.000Z", direction: "campus", amount: 118, trip_mode: "shared", solo_by: null, paid_by: "omar", notes: "Morning lecture", settled_at: null, settled_by: null },
-  { id: "2", ride_at: "2026-09-11T16:18:00.000Z", direction: "home", amount: 96, trip_mode: "shared", solo_by: null, paid_by: "khaled", notes: null, settled_at: null, settled_by: null },
-  { id: "3", ride_at: "2026-09-10T07:50:00.000Z", direction: "campus", amount: 110, trip_mode: "shared", solo_by: null, paid_by: "khaled", notes: "Traffic was wild", settled_at: "2026-09-10T13:04:00.000Z", settled_by: "omar" },
-  { id: "4", ride_at: "2026-09-09T16:05:00.000Z", direction: "home", amount: 102, trip_mode: "solo", solo_by: "omar", paid_by: "omar", notes: null, settled_at: "2026-09-09T19:20:00.000Z", settled_by: "khaled" },
-  { id: "5", ride_at: "2026-09-08T08:11:00.000Z", direction: "campus", amount: 124, trip_mode: "shared", solo_by: null, paid_by: "omar", notes: null, settled_at: "2026-09-08T13:12:00.000Z", settled_by: "khaled" },
-];
-
-type Tab = "rides" | "budget" | "trends" | "space";
-type Modal = "add" | "edit" | "sign-in" | "create-space" | "join-space" | "share" | "budget" | "shortcut" | null;
+type Tab = "today" | "rides" | "months" | "space";
+type Modal = SheetKind | null;
 type AuthUser = { id: string; email?: string } | null;
-type TimeHorizon = "week" | "4weeks" | "3months" | "lifetime";
 
-const money = new Intl.NumberFormat("en-EG", { style: "currency", currency: "EGP", maximumFractionDigits: 2 });
 const dateFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric" });
-const dateTimeFormatter = new Intl.DateTimeFormat("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const money = { format: (value: number) => `EGP ${egp(value)}` };
 
 function getOtherMember(members: Member[], userId: string) {
   return members.find((member) => member.user_id !== userId) ?? null;
 }
 
-function getTripMemberSpend(trip: Trip, memberId: string) {
-  if (trip.trip_mode === "solo") return trip.solo_by === memberId ? trip.amount : 0;
-  return trip.amount / 2;
-}
+const TABS: { id: Tab; label: string; icon: string }[] = [
+  { id: "today", label: "Today", icon: "today" },
+  { id: "rides", label: "Rides", icon: "rides" },
+  { id: "months", label: "Months", icon: "months" },
+  { id: "space", label: "Space", icon: "space" },
+];
 
 export default function Home() {
   const supabase = getSupabase();
   const previewMode = !supabase && process.env.NODE_ENV !== "production";
 
   // Tab State - starts fresh on 'rides' on app open
-  const [activeTab, setActiveTab] = useState<Tab>("rides");
+  const [activeTab, setActiveTab] = useState<Tab>("today");
 
   const [shortcutPreFill, setShortcutPreFill] = useState<{ amount?: string; mode?: "shared" | "solo"; paidBy?: string } | null>(null);
 
@@ -148,7 +119,7 @@ export default function Home() {
   });
 
   const [trips, setTrips] = useState<Trip[]>(() => {
-    if (previewMode) return demoTrips;
+    if (previewMode) return buildDemoTrips();
     if (typeof window === "undefined") return [];
     try {
       const saved = localStorage.getItem("ridewise_cached_trips");
@@ -161,17 +132,14 @@ export default function Home() {
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
   // Rides Feed Filters
-  const [ridesFilter, setRidesFilter] = useState<"all" | "unsettled" | "shared" | "solo">("all");
+  const [ridesFilter, setRidesFilter] = useState<RidesFilter>("all");
 
   // Analytics & Scope State
-  const [timeHorizon, setTimeHorizon] = useState<TimeHorizon>("week");
   const [weekOffset, setWeekOffset] = useState<number>(0);
   // Which way the week view slides in after a swipe or arrow tap.
   const [weekSlide, setWeekSlide] = useState<"next" | "prev" | null>(null);
   const swipeStartRef = useRef<{ x: number; y: number } | null>(null);
   const [weeklyBudget, setWeeklyBudget] = useState<number>(700);
-  const [soloScope, setSoloScope] = useState<SoloScope>("mine");
-  const [activeDailyBar, setActiveDailyBar] = useState<DailySpendPoint | null>(null);
   const [hasPasskey, setHasPasskey] = useState<boolean>(() => {
     if (typeof window === "undefined") return false;
     try {
@@ -200,16 +168,8 @@ export default function Home() {
     } catch {
       // Ignore
     }
-    notify(`Weekly budget saved: ${money.format(newBudget)} (${money.format(newBudget / 4)}/college day).`, "success");
+    notify(`Weekly budget saved: ${money.format(newBudget)} (${money.format(newBudget / 4)} per college day).`, "success");
   }
-
-  // Accordion Expand/Collapse State for Progressive Disclosure
-  const [accordionsOpen, setAccordionsOpen] = useState({
-    matrix: false,
-    economics: false,
-    bus: false,
-    insights: false,
-  });
 
   const [toasts, setToasts] = useState<{ id: string; type: "success" | "error" | "info"; message: string }[]>([]);
   const [loading, setLoading] = useState(false);
@@ -439,13 +399,11 @@ export default function Home() {
 
   function changeWeek(step: number) {
     setWeekSlide(step > 0 ? "next" : "prev");
-    setActiveDailyBar(null);
     setWeekOffset((prev) => (step === 0 ? 0 : prev + step));
   }
 
   function jumpToCurrentWeek() {
     setWeekSlide(weekOffset > 0 ? "prev" : "next");
-    setActiveDailyBar(null);
     setWeekOffset(0);
   }
 
@@ -471,34 +429,6 @@ export default function Home() {
       changeWeek(dx < 0 ? 1 : -1);
     },
   };
-
-  const weekPaneClass = weekSlide ? `week-slide-${weekSlide}` : "";
-
-  function renderWeekSwitcher() {
-    const weekName =
-      weekOffset === 0 ? "This week" : weekOffset === -1 ? "Last week" : weekOffset === 1 ? "Next week" : weekOffset < 0 ? `${Math.abs(weekOffset)} weeks ago` : `In ${weekOffset} weeks`;
-    return (
-      <div className="week-switcher-bar">
-        <button type="button" className="week-nav-arrow-btn" onClick={() => changeWeek(-1)} aria-label="Previous week">
-          ‹
-        </button>
-        <div className="week-switcher-center">
-          <span className="week-switcher-title">{weekName}</span>
-          <span className="week-switcher-dates">{analytics.weekLabel}</span>
-          {weekOffset !== 0 ? (
-            <button type="button" className="today-jump-btn" onClick={jumpToCurrentWeek}>
-              Back to this week
-            </button>
-          ) : (
-            <span className="week-swipe-hint">Swipe to change week</span>
-          )}
-        </div>
-        <button type="button" className="week-nav-arrow-btn" onClick={() => changeWeek(1)} aria-label="Next week">
-          ›
-        </button>
-      </div>
-    );
-  }
 
   async function handleNotificationSetup() {
     let permission = notificationPermission;
@@ -536,243 +466,61 @@ export default function Home() {
   }
 
   const stats = useMemo(() => {
-    const activeTrips = trips.filter((trip) => trip.trip_mode === "shared" && !trip.settled_at);
-    const owedToYou = activeTrips.filter((trip) => trip.paid_by === currentUserId).reduce((sum, trip) => sum + trip.amount / 2, 0);
-    const youOwe = activeTrips.filter((trip) => trip.paid_by !== currentUserId).reduce((sum, trip) => sum + trip.amount / 2, 0);
-    const total = trips.reduce((sum, trip) => sum + trip.amount, 0);
-    const toCampus = trips.filter((trip) => trip.direction === "campus").length;
-    const toHome = trips.length - toCampus;
-    const paidByYou = trips.filter((trip) => trip.paid_by === currentUserId).reduce((sum, trip) => sum + trip.amount, 0);
-    const paidByOther = trips.filter((trip) => trip.paid_by !== currentUserId).reduce((sum, trip) => sum + trip.amount, 0);
-    const otherMember = getOtherMember(members, currentUserId);
-    const personalSpendByYou = trips.reduce((sum, trip) => sum + memberTripSpend(trip, currentUserId), 0);
-    const personalSpendByOther = trips.reduce((sum, trip) => sum + (otherMember ? memberTripSpend(trip, otherMember.user_id) : 0), 0);
-    const paidByMember = members.map((member) => ({
-      ...member,
-      total: trips.filter((trip) => trip.paid_by === member.user_id).reduce((sum, trip) => sum + trip.amount, 0),
-    }));
-    const totalByMember = members.map((member) => ({
-      user_id: member.user_id,
-      display_name: member.display_name,
-      spend: trips.reduce((sum, trip) => sum + getTripMemberSpend(trip, member.user_id), 0),
-    }));
-    return { owedToYou, youOwe, net: owedToYou - youOwe, total, toCampus, toHome, paidByYou, paidByOther, personalSpendByYou, personalSpendByOther, otherMember, paidByMember, totalByMember };
-  }, [trips, members, currentUserId]);
+    const open = trips.filter((trip) => trip.trip_mode === "shared" && !trip.settled_at);
+    const owedToYou = open.filter((trip) => trip.paid_by === currentUserId).reduce((sum, trip) => sum + trip.amount / 2, 0);
+    const youOwe = open.filter((trip) => trip.paid_by !== currentUserId).reduce((sum, trip) => sum + trip.amount / 2, 0);
+    return { owedToYou, youOwe, net: owedToYou - youOwe };
+  }, [trips, currentUserId]);
 
   const recentTrips = useMemo(() => {
     return [...trips].sort((a, b) => +new Date(b.ride_at) - +new Date(a.ride_at));
   }, [trips]);
 
-  const filteredFeedTrips = useMemo(() => {
-    return recentTrips.filter((trip) => {
-      if (ridesFilter === "unsettled") return trip.trip_mode === "shared" && !trip.settled_at;
-      if (ridesFilter === "shared") return trip.trip_mode === "shared";
-      if (ridesFilter === "solo") return trip.trip_mode === "solo";
-      return true;
-    });
-  }, [recentTrips, ridesFilter]);
+  const unsettledTrips = recentTrips.filter((trip) => trip.trip_mode === "shared" && !trip.settled_at);
 
-  const sharedTrips = recentTrips.filter((trip) => trip.trip_mode === "shared");
-  const unsettledTrips = sharedTrips.filter((trip) => !trip.settled_at);
+  // Today's allowance, the week on screen, and every month since the first ride.
+  const todayMetrics = useMemo(
+    () => computeTodayBudget(trips, currentUserId, weeklyBudget, new Date()),
+    [trips, currentUserId, weeklyBudget]
+  );
 
-  const analytics = useMemo(() => {
+  const week: WeekView = useMemo(() => {
     const now = new Date();
-    const todayIso = toLocalDateKey(now);
-    const { start: weekStart, end: weekEnd } = getAcademicWeekBounds(weekOffset, now);
-
-    let horizonStart: Date | null = null;
-    let horizonEnd: Date | null = null;
-    let horizonLabel = "";
-
-    if (timeHorizon === "week") {
-      horizonStart = weekStart;
-      horizonEnd = weekEnd;
-      const isCurrentWeek = weekOffset === 0;
-      const isLastWeek = weekOffset === -1;
-      const weekName = isCurrentWeek ? "This week" : isLastWeek ? "Last week" : weekOffset < 0 ? `${Math.abs(weekOffset)}w ago` : `+${weekOffset}w`;
-      horizonLabel = `${weekName} (${dateFormatter.format(weekStart)} – ${dateFormatter.format(weekEnd)})`;
-    } else if (timeHorizon === "4weeks") {
-      horizonStart = new Date(weekEnd.getTime() - (28 * 24 * 60 * 60 * 1000) + 1);
-      horizonEnd = weekEnd;
-      horizonLabel = `4 Weeks (${dateFormatter.format(horizonStart)} – ${dateFormatter.format(horizonEnd)})`;
-    } else if (timeHorizon === "3months") {
-      horizonStart = new Date(weekEnd.getTime() - (90 * 24 * 60 * 60 * 1000) + 1);
-      horizonEnd = weekEnd;
-      horizonLabel = `3 Months (${dateFormatter.format(horizonStart)} – ${dateFormatter.format(horizonEnd)})`;
-    } else {
-      horizonLabel = "All time";
-    }
-
-    const horizonTrips = trips.filter((trip) => {
-      const tripDate = new Date(trip.ride_at);
-      if (horizonStart && tripDate < horizonStart) return false;
-      if (horizonEnd && tripDate > horizonEnd) return false;
-      return true;
+    const { start, end } = getAcademicWeekBounds(weekOffset, now);
+    const weekTrips = trips.filter((trip) => {
+      const at = new Date(trip.ride_at);
+      return at >= start && at <= end;
     });
-
-    const totalSpend = weeklyTotal(horizonTrips);
-    const totalRides = horizonTrips.length;
-    const avgRideCost = totalRides > 0 ? totalSpend / totalRides : 0;
-
-    // 4-Day Budget Calculations: PER PERSON (half of shared and own solo only)
-    const currentWeekTrips = trips.filter((t) => {
-      const d = new Date(t.ride_at);
-      return d >= weekStart && d <= weekEnd;
-    });
-    const weekActualSpend = weeklyTotal(currentWeekTrips);
-    const personalWeekActualSpend = personalTotal(currentWeekTrips, currentUserId);
-    const expectedDailyBudget = dailyBudget(weeklyBudget, EXPECTED_COLLEGE_DAYS);
-    const personalWeekCollegeDays = personalCollegeDaysUsed(currentWeekTrips, currentUserId);
-    const completedDaysCapped = Math.min(EXPECTED_COLLEGE_DAYS, personalWeekCollegeDays);
-    const expectedBudgetUsed = completedDaysCapped * expectedDailyBudget;
-    const budgetDiff = budgetDifference(personalWeekActualSpend, expectedBudgetUsed);
-    const budgetPct = budgetPercentage(personalWeekActualSpend, expectedBudgetUsed);
-    const remainBudget = remainingBudget(weeklyBudget, personalWeekActualSpend);
-    // Days left come from the calendar (Sat, Sun, Mon, Wed still ahead), not from rides logged,
-    // so a missed day's budget is spread over the college days that remain.
-    const remainCollegeDays = collegeDaysLeft(weekStart, weekEnd, now);
-    const remainBudgetPerDay = remainCollegeDays > 0 ? remainBudget / remainCollegeDays : 0;
-
-    let budgetStatus: "under" | "over" | "on" = "on";
-    if (completedDaysCapped > 0) {
-      if (budgetDiff > 0.5) budgetStatus = "over";
-      else if (budgetDiff < -0.5) budgetStatus = "under";
-      else budgetStatus = "on";
-    }
-
-    // Saturday -> Friday Personal Day-by-Day Breakdown
-    const { days: spendingDays, maxSpend: dailyMaxSpend } = computeSpendingByDay(
-      trips,
-      weekStart,
-      expectedDailyBudget,
-      todayIso,
-      currentUserId
-    );
-
-    // 2x2 Matrix Breakdown
-    const matrix = compute2x2Matrix(horizonTrips);
-
-    // Solo vs Shared Comparison & Scoped Solo Savings
-    const scopedSoloTrips = filterSoloTrips(horizonTrips, soloScope, currentUserId);
-    const soloSpendVal = scopedSoloTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const soloRidesCount = scopedSoloTrips.length;
-    const soloAvgCost = soloRidesCount > 0 ? soloSpendVal / soloRidesCount : 0;
-    const mySoloTrips = filterSoloTrips(horizonTrips, "mine", currentUserId);
-    const mySoloSpend = mySoloTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const sharedSpendVal = sharedTotal(horizonTrips);
-    const sharedRidesCount = horizonTrips.filter((t) => t.trip_mode === "shared").length;
-    const sharedAvgCost = sharedRidesCount > 0 ? sharedSpendVal / sharedRidesCount : 0;
-    const sharingSavingsVal = sharedRideSavings(horizonTrips);
-    const allTimeSharingSavings = sharedRideSavings(trips);
-
-    // Discrete non-cumulative daily spending series & personal monthly commute average
-    const dailySpendingSeries = computeDailySpendingSeries(horizonTrips, currentUserId);
-    const personalMonthlyAvg = personalAverageMonthlySpend(trips, currentUserId);
-    const dailySpendingAvg = dailySpendingSeries.length > 0
-      ? dailySpendingSeries.reduce((s, d) => s + d.amount, 0) / dailySpendingSeries.length
-      : 0;
-
-    // Cumulative Spending Trend (fallback / backwards compatibility)
-    const spendingTrend = computeSpendingTrend(horizonTrips, currentUserId);
-
-    // Commuter Route Breakdown (Morning Campus vs Evening Home)
-    const campusTrips = horizonTrips.filter((t) => t.direction === "campus");
-    const homeTrips = horizonTrips.filter((t) => t.direction === "home");
-    const campusSpend = campusTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const homeSpend = homeTrips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const campusSharedCount = campusTrips.filter((t) => t.trip_mode === "shared").length;
-    const campusSoloCount = filterSoloTrips(campusTrips, soloScope, currentUserId).length;
-    const homeSharedCount = homeTrips.filter((t) => t.trip_mode === "shared").length;
-    const homeSoloCount = filterSoloTrips(homeTrips, soloScope, currentUserId).length;
-
-    // EGP 42,000 Bus Benchmark - TOTAL spending shared and solo of everyone vs bus (42,000)
-    const totalGroupSpend = trips.reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const allTripsSharedTotal = trips.filter((t) => t.trip_mode === "shared").reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const allTripsSoloTotal = trips.filter((t) => t.trip_mode === "solo").reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
-    const busSavingsVal = busBenchmarkSavings(totalGroupSpend, BUS_BENCHMARK);
-    const busUsedPctVal = busBenchmarkPercentageUsed(totalGroupSpend, BUS_BENCHMARK);
-    const busSavedPctVal = busBenchmarkPercentageSaved(totalGroupSpend, BUS_BENCHMARK);
-    const sharedBusUsedPct = (allTripsSharedTotal / BUS_BENCHMARK) * 100;
-    const soloBusUsedPct = (allTripsSoloTotal / BUS_BENCHMARK) * 100;
-    const personalAllTimeSpend = personalTotal(trips, currentUserId);
-
-    // Monthly Comparison Metrics: current vs expected vs budget limit (weekly * 4)
-    const monthlyMetrics = computeMonthlyComparisonMetrics(trips, currentUserId, weeklyBudget, now);
-
-    // Factual Insights
-    const allTimeTotalSpend = weeklyTotal(trips);
-    const factualInsights = generateFactualInsights({
-      actualSpent: personalWeekActualSpend,
-      expectedBudgetUsed,
-      weeklyBudget,
-      usedDays: personalWeekCollegeDays,
-      days: spendingDays,
-      allTrips: trips,
-      totalAllTimeSpend: allTimeTotalSpend,
-      sharingSavings: allTimeSharingSavings,
-      currencyFormatter: money,
-    });
-
-    // Today's Budget Metrics
-    const todayMetrics = computeTodayBudget(trips, currentUserId, weeklyBudget, now);
-
+    const spent = personalTotal(weekTrips, currentUserId);
+    const dailyAllowance = dailyBudget(weeklyBudget, EXPECTED_COLLEGE_DAYS);
+    const remaining = remainingBudget(weeklyBudget, spent);
+    // Days left come from the calendar, so a missed day's money moves onto the days that remain.
+    const daysLeft = collegeDaysLeft(start, end, now);
+    const { days } = computeSpendingByDay(trips, start, dailyAllowance, toLocalDateKey(now), currentUserId);
     return {
-      todayMetrics,
-      horizonLabel,
-      weekLabel: `${dateFormatter.format(weekStart)} – ${dateFormatter.format(weekEnd)}`,
-      totalSpend,
-      totalRides,
-      avgRideCost,
-      weeklyBudget,
-      expectedDailyBudget,
-      weekActualSpend,
-      personalWeekActualSpend,
-      personalWeekCollegeDays,
-      completedDaysCapped,
-      expectedBudgetUsed,
-      budgetDiff,
-      budgetPct,
-      remainBudget,
-      remainCollegeDays,
-      remainBudgetPerDay,
-      budgetStatus,
-      spendingDays,
-      dailyMaxSpend,
-      matrix,
-      soloSpendVal,
-      mySoloSpend,
-      sharedSpendVal,
-      soloRidesCount,
-      sharedRidesCount,
-      soloAvgCost,
-      sharedAvgCost,
-      sharingSavingsVal,
-      allTimeTotalSpend,
-      totalGroupSpend,
-      allTripsSharedTotal,
-      allTripsSoloTotal,
-      personalAllTimeSpend,
-      busSavingsVal,
-      busUsedPctVal,
-      busSavedPctVal,
-      soloBusUsedPct,
-      sharedBusUsedPct,
-      monthlyMetrics,
-      factualInsights,
-      spendingTrend,
-      dailySpendingSeries,
-      personalMonthlyAvg,
-      dailySpendingAvg,
-      campusTrips,
-      homeTrips,
-      campusSpend,
-      homeSpend,
-      campusSharedCount,
-      campusSoloCount,
-      homeSharedCount,
-      homeSoloCount,
+      label: `${dateFormatter.format(start)} – ${dateFormatter.format(end)}`,
+      name:
+        weekOffset === 0
+          ? "This week"
+          : weekOffset === -1
+          ? "Last week"
+          : weekOffset === 1
+          ? "Next week"
+          : weekOffset < 0
+          ? `${Math.abs(weekOffset)} weeks ago`
+          : `In ${weekOffset} weeks`,
+      spent,
+      budget: weeklyBudget,
+      remaining,
+      daysLeft,
+      perDayLeft: daysLeft > 0 ? Math.max(0, remaining) / daysLeft : 0,
+      dailyAllowance,
+      rides: weekTrips.filter((trip) => trip.trip_mode === "shared" || trip.solo_by === currentUserId).length,
+      days,
     };
-  }, [trips, timeHorizon, weekOffset, weeklyBudget, currentUserId, soloScope]);
+  }, [trips, weekOffset, weeklyBudget, currentUserId]);
+
+  const months = useMemo(() => computeMonthlyHistory(trips, currentUserId, new Date()), [trips, currentUserId]);
 
   async function saveTrip(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -1028,1175 +776,233 @@ export default function Home() {
     else await new Promise((resolve) => setTimeout(resolve, 500));
   }, modal === null && !loading);
 
-  function toggleAccordion(key: keyof typeof accordionsOpen) {
-    setAccordionsOpen((prev) => ({ ...prev, [key]: !prev[key] }));
-  }
 
   if (loading) {
     return (
-      <main className="loading-screen">
-        <div className="loader" />
+      <main className="loading">
+        <span className="spinner" aria-hidden="true" />
         <p>Opening Ridewise</p>
       </main>
     );
   }
 
+  const otherName = otherMember?.display_name ?? "your co-rider";
+  const rideActions = {
+    onEdit: (trip: Trip) => {
+      setEditingTrip(trip);
+      setModal("edit");
+    },
+    onDelete: (trip: Trip) => void deleteTrip(trip),
+    onSettle: (trip: Trip, paidByMemberId?: string) => void settleTrip(trip, paidByMemberId),
+  };
+  const showUnsettled = () => {
+    setRidesFilter("unsettled");
+    setActiveTab("rides");
+  };
+
   return (
-    <div className="app-shell">
-      {/* Toast Notification Container */}
+    <div className="app">
       {toasts.length > 0 && (
-        <div className="toast-portal" role="region" aria-label="Notifications" aria-live="polite">
+        <div className="toasts" role="region" aria-label="Notifications" aria-live="polite">
           {toasts.map((toast) => (
-            <div key={toast.id} className={`toast-card toast-${toast.type}`}>
-              <span className="toast-badge">
-                {toast.type === "success" && "✓"}
-                {toast.type === "error" && "!"}
-                {toast.type === "info" && "i"}
-              </span>
-              <span className="toast-text">{toast.message}</span>
-              <button className="toast-dismiss" onClick={() => dismissToast(toast.id)} aria-label="Dismiss">×</button>
+            <div key={toast.id} className={`toast toast-${toast.type}`}>
+              <Icon name={toast.type === "success" ? "check" : toast.type === "error" ? "x" : "bell"} size={18} />
+              <span>{toast.message}</span>
+              <button type="button" className="icon-btn" onClick={() => dismissToast(toast.id)} aria-label="Dismiss">
+                <Icon name="x" size={16} />
+              </button>
             </div>
           ))}
         </div>
       )}
 
-      {/* Top App Header */}
-      <header className="app-topbar">
-        <button className="brand-btn" onClick={() => setActiveTab("rides")}>
-          ridewise<span>.</span>
+      <header className="topbar">
+        <button type="button" className="wordmark" onClick={() => setActiveTab("today")}>
+          ridewise
         </button>
-        <div className="topbar-actions">
+        <div className="topbar-side">
+          {previewMode && <span className="tag">Preview</span>}
           {group && (
-            <button className="space-pill-btn" onClick={() => setActiveTab("space")}>
-              <span className="space-pill-dot" />
-              <span>{group.name}</span>
-            </button>
-          )}
-          {previewMode && <span className="demo-badge">Preview</span>}
-          {supabase && user && (
-            <button className="avatar-btn" onClick={() => setActiveTab("space")}>
-              {currentName.slice(0, 1)}
+            <button type="button" className="link" onClick={() => setActiveTab("space")}>
+              {group.name}
             </button>
           )}
         </div>
       </header>
 
       {/* Pull-to-refresh indicator (moved directly by the pull hook, outside React renders) */}
-      <div
-        ref={pull.indicatorRef}
-        className={`ptr-indicator ${pull.refreshing ? "refreshing" : ""}`}
-        aria-hidden={!pull.refreshing}
-        role="status"
-      >
+      <div ref={pull.indicatorRef} className={`ptr-indicator ${pull.refreshing ? "refreshing" : ""}`} aria-hidden={!pull.refreshing} role="status">
         <svg viewBox="0 0 24 24" width="20" height="20">
           <circle ref={pull.arcRef} cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
         </svg>
         {pull.refreshing && <span className="sr-only">Refreshing</span>}
       </div>
 
-      {/* Main Content Area Based on Active Tab */}
       <div ref={pull.contentRef} className="ptr-content">
-      {!group ? (
-        <div className="onboarding-wrap">
-          <div className="balance-hero-eyebrow">College Commute Ledger</div>
-          <h1>Track every ride.<br />Split fairly.</h1>
-          <p>{!supabase ? "Previewing Ridewise with demo data. Connect Supabase to enable sync." : user ? "Create your shared ride space or join Omar's invite." : "Sign in with Google to open your shared ledger."}</p>
-          <div className="onboarding-actions">
-            {!supabase ? (
-              <button className="sheet-submit-btn" onClick={() => setGroup(demoGroup)}>Use Preview Mode</button>
-            ) : user ? (
-              <>
-                <button className="sheet-submit-btn" onClick={() => setModal("create-space")}>Create Space</button>
-                <button className="hero-action-btn hero-action-secondary" style={{ color: "var(--ink)", border: "1px solid var(--line)" }} onClick={() => setModal("join-space")}>Join with Code</button>
-              </>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%", maxWidth: "320px" }}>
-                {hasPasskey && (
-                  <button
-                    type="button"
-                    className="sheet-submit-btn"
-                    style={{ background: "linear-gradient(135deg, #10b981, #059669)", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}
-                    onClick={() => void signInWithPasskey()}
-                  >
-                    <span>🔑</span> Sign in with Face ID
+        {!group ? (
+          <main className="welcome">
+            <h1>Every ride, split down the middle.</h1>
+            <p>
+              {!supabase
+                ? "You are looking at Ridewise with sample rides. Connect Supabase to sync a real ledger."
+                : user
+                ? "Create a shared space for the two of you, or join one with an invite code."
+                : "Sign in to open the ledger you share with your co-rider."}
+            </p>
+            <div className="welcome-actions">
+              {!supabase ? (
+                <button type="button" className="btn btn-primary btn-wide" onClick={() => setGroup(demoGroup)}>
+                  Open the preview
+                </button>
+              ) : user ? (
+                <>
+                  <button type="button" className="btn btn-primary btn-wide" onClick={() => setModal("create-space")}>
+                    Create a space
                   </button>
-                )}
-                <button
-                  type="button"
-                  className={hasPasskey ? "hero-action-btn hero-action-secondary" : "sheet-submit-btn"}
-                  style={hasPasskey ? { color: "var(--ink)", border: "1px solid var(--line)" } : {}}
-                  onClick={() => setModal("sign-in")}
-                >
-                  Sign In with Google
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      ) : (
-        <>
-          {/* TAB 1: RIDES (Feed & Balance Hero) */}
-          {activeTab === "rides" && (
-            <main className="tab-content" key="tab-rides">
-              {/* Top Hero Balance Card */}
-              <section className="balance-hero-card">
-                <span className="balance-hero-eyebrow">{group.name}</span>
-                <span className="balance-hero-title">
-                  {stats.net === 0
-                    ? "You’re all square"
-                    : stats.net > 0
-                    ? `${otherMember?.display_name ?? "Khaled"} owes you`
-                    : `You owe ${otherMember?.display_name ?? "Khaled"}`}
-                </span>
-                <div className="balance-hero-amount">
-                  {stats.net === 0 ? "EGP 0.00" : money.format(Math.abs(stats.net))}
-                </div>
-                <p className="balance-hero-sub">
-                  {stats.net === 0 ? "No pending halves right now" : "Across unsettled shared rides"}
-                </p>
-                <div className="balance-hero-actions">
-                  <button className="hero-action-btn hero-action-primary" onClick={() => requestAction("add")}>
-                    + Log ride
+                  <button type="button" className="btn btn-quiet btn-wide" onClick={() => setModal("join-space")}>
+                    Join with a code
                   </button>
-                  <button
-                    type="button"
-                    className="hero-action-btn hero-action-secondary"
-                    onClick={() => setRidesFilter(ridesFilter === "unsettled" ? "all" : "unsettled")}
-                  >
-                    {ridesFilter === "unsettled" ? "Show all rides" : `Unsettled (${unsettledTrips.length})`}
-                  </button>
-                </div>
-              </section>
-
-              {/* Top Quick Settlement Strip if pending */}
-              {stats.net !== 0 && (
-                <div className="rides-settlement-strip">
-                  <div className="rides-settlement-info">
-                    <span className="rides-settlement-icon">⚖️</span>
-                    <span>
-                      {stats.net > 0
-                        ? `${otherMember?.display_name ?? "Khaled"} owes you ${money.format(stats.net)}`
-                        : `You owe ${otherMember?.display_name ?? "Khaled"} ${money.format(Math.abs(stats.net))}`}
-                    </span>
-                  </div>
-                  <button
-                    type="button"
-                    className="rides-settlement-btn"
-                    onClick={() => setRidesFilter("unsettled")}
-                  >
-                    Review {unsettledTrips.length} {unsettledTrips.length === 1 ? "ride" : "rides"}
-                  </button>
-                </div>
-              )}
-
-              {/* TODAY'S COMMUTE BUDGET CARD */}
-              <section className="today-budget-card">
-                <div className="today-budget-header">
-                  <div className="today-budget-title-wrap">
-                    <span className="today-budget-eyebrow">
-                      Today’s Allowance · {new Intl.DateTimeFormat("en", { weekday: "short", month: "short", day: "numeric" }).format(new Date())}
-                    </span>
-                    <div className="today-budget-title">
-                      {!analytics.todayMetrics.isCollegeDay ? (
-                        <>
-                          <span className="today-budget-amount">No college</span>
-                          <span className="today-budget-sub">
-                            {analytics.todayMetrics.collegeDaysLeft > 0 && analytics.todayMetrics.nextCollegeDay
-                              ? `next: ${analytics.todayMetrics.nextCollegeDay}`
-                              : "week done"}
-                          </span>
-                        </>
-                      ) : analytics.todayMetrics.todayRemaining >= 0 ? (
-                        <>
-                          <span className="today-budget-amount">{money.format(analytics.todayMetrics.todayRemaining)}</span>
-                          <span className="today-budget-sub">left today</span>
-                        </>
-                      ) : (
-                        <>
-                          <span className="today-budget-amount over">{money.format(Math.abs(analytics.todayMetrics.todayRemaining))}</span>
-                          <span className="today-budget-sub over">over today’s budget</span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Progress Bar */}
-                <div className="today-budget-progress-wrap">
-                  <div className="today-budget-progress-bar">
-                    <div
-                      className={`today-budget-progress-fill ${
-                        analytics.todayMetrics.todayActualSpend > analytics.todayMetrics.todayBudget
-                          ? "over"
-                          : analytics.todayMetrics.todayPct >= 80
-                          ? "warning"
-                          : ""
-                      }`}
-                      style={{
-                        width: `${Math.min(100, Math.max(0, analytics.todayMetrics.todayPct))}%`,
-                      }}
-                    />
-                  </div>
-                </div>
-
-                {/* 3-Part Footer Stats: Daily allowance, Spent today, Rides logged */}
-                <div className="today-budget-footer">
-                  <div className="today-budget-stat">
-                    <span className="today-stat-label">Today’s allowance</span>
-                    <span className="today-stat-val">
-                      {money.format(analytics.todayMetrics.todayBudget)}
-                    </span>
-                  </div>
-                  <div className="today-budget-divider" />
-                  <div className="today-budget-stat">
-                    <span className="today-stat-label">Spent today</span>
-                    <span className="today-stat-val">
-                      {money.format(analytics.todayMetrics.todayActualSpend)}
-                    </span>
-                  </div>
-                  <div className="today-budget-divider" />
-                  <div className="today-budget-stat">
-                    <span className="today-stat-label">Rides logged</span>
-                    <span className="today-stat-val">
-                      {analytics.todayMetrics.todayRidesCount} {analytics.todayMetrics.todayRidesCount === 1 ? "ride" : "rides"}
-                    </span>
-                  </div>
-                </div>
-              </section>
-
-              {/* Feed Filter Chips */}
-              <div className="filter-bar">
-                <button
-                  type="button"
-                  className={`filter-chip ${ridesFilter === "all" ? "active" : ""}`}
-                  onClick={() => setRidesFilter("all")}
-                >
-                  All rides ({recentTrips.length})
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip ${ridesFilter === "unsettled" ? "active" : ""}`}
-                  onClick={() => setRidesFilter("unsettled")}
-                >
-                  Unsettled ({unsettledTrips.length})
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip ${ridesFilter === "shared" ? "active" : ""}`}
-                  onClick={() => setRidesFilter("shared")}
-                >
-                  Shared ({sharedTrips.length})
-                </button>
-                <button
-                  type="button"
-                  className={`filter-chip ${ridesFilter === "solo" ? "active" : ""}`}
-                  onClick={() => setRidesFilter("solo")}
-                >
-                  Solo ({recentTrips.length - sharedTrips.length})
-                </button>
-              </div>
-
-              {/* Ride Feed List */}
-              <div className="section-header-row">
-                <h3 className="section-header-title">Recent rides</h3>
-                <span className="section-header-meta">{filteredFeedTrips.length} logged</span>
-              </div>
-
-              {filteredFeedTrips.length === 0 ? (
-                <div className="empty-feed">
-                  <h4>No rides in this view</h4>
-                  <p>Tap + below to log your next ride to campus or back home.</p>
-                </div>
+                </>
               ) : (
-                <div className="trip-list">
-                  {filteredFeedTrips.map((trip) => {
-                    const payer = members.find((m) => m.user_id === trip.paid_by)?.display_name ?? "Unknown";
-                    const debtorId = members.find((m) => m.user_id !== trip.paid_by)?.user_id;
-                    const debtorName = members.find((m) => m.user_id === debtorId)?.display_name ?? "co-pilot";
-                    const isCurrentUserDebtor = trip.paid_by !== currentUserId;
-                    const soloRider = members.find((m) => m.user_id === trip.solo_by)?.display_name ?? "Solo";
-
-                    return (
-                      <article key={trip.id} className="trip-card">
-                        <div className="trip-card-main">
-                          <div className="trip-card-left">
-                            <div className={`trip-direction-badge ${trip.direction}`}>
-                              {trip.direction === "campus" ? "🎓" : "🏡"}
-                            </div>
-                            <div className="trip-card-info">
-                              <span className="trip-card-title">
-                                {trip.trip_mode === "solo" ? `${soloRider} alone` : trip.direction === "campus" ? "To campus" : "Back home"}
-                              </span>
-                              <span className="trip-card-meta">
-                                {dateTimeFormatter.format(new Date(trip.ride_at))}
-                                {trip.notes && ` · ${trip.notes}`}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="trip-card-price">
-                            <span className="trip-card-amount">{money.format(trip.amount)}</span>
-                            <span className="trip-card-split-label">
-                              {trip.trip_mode === "solo" ? "full cost" : `${money.format(trip.amount / 2)} each`}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="trip-card-footer">
-                          <span className="trip-payer-tag">
-                            Paid by <b>{payer}</b>
-                          </span>
-                          <div className="trip-actions">
-                            <button
-                              type="button"
-                              className="trip-action-icon-btn"
-                              onClick={() => { setEditingTrip(trip); setModal("edit"); }}
-                              title="Edit trip"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              type="button"
-                              className="trip-action-icon-btn"
-                              style={{ color: "#a84942" }}
-                              onClick={() => void deleteTrip(trip)}
-                              title="Delete trip"
-                            >
-                              Delete
-                            </button>
-                            {trip.settled_at ? (
-                              <span className="trip-badge-settled">Settled</span>
-                            ) : trip.trip_mode === "solo" ? (
-                              <span className="trip-badge-solo">Personal</span>
-                            ) : isCurrentUserDebtor ? (
-                              <button
-                                type="button"
-                                className="trip-settle-btn"
-                                onClick={() => void settleTrip(trip, currentUserId)}
-                              >
-                                I paid my half
-                              </button>
-                            ) : (
-                              <button
-                                type="button"
-                                className="trip-settle-btn"
-                                onClick={() => void settleTrip(trip, debtorId)}
-                              >
-                                Settle {debtorName}
-                              </button>
-                            )}
-                          </div>
-                        </div>
-                      </article>
-                    );
-                  })}
-                </div>
-              )}
-            </main>
-          )}
-
-          {/* TAB 2: BUDGET (Weekly College Routine & Pacing) */}
-          {activeTab === "budget" && (
-            <main className={`tab-content ${weekPaneClass}`} key={`tab-budget-${weekOffset}`} {...weekSwipeHandlers}>
-              {renderWeekSwitcher()}
-
-              {/* Hero 4-Day Budget Card: Per Person */}
-              <section className="budget-hero-card">
-                <div className="budget-hero-top">
-                  <div className="budget-hero-title-wrap">
-                    <span className="budget-hero-eyebrow">Personal Budget · 4 College Days ({currentName})</span>
-                    <h3 className="budget-hero-title">
-                      {money.format(analytics.personalWeekActualSpend)}{" "}
-                      <span style={{ fontSize: "13px", fontWeight: 400, color: "var(--muted)" }}>
-                        your share
-                      </span>
-                    </h3>
-                  </div>
-                  <span className={`budget-badge ${analytics.budgetStatus}`}>
-                    {analytics.budgetStatus === "under" && `+${Math.abs(analytics.budgetPct).toFixed(0)}% under`}
-                    {analytics.budgetStatus === "over" && `${Math.abs(analytics.budgetPct).toFixed(0)}% over`}
-                    {analytics.budgetStatus === "on" && "On track"}
-                  </span>
-                </div>
-                <p style={{ margin: "-8px 0 0", fontSize: "11px", color: "var(--muted)", lineHeight: 1.35 }}>
-                  Per-person allowance · 50% of shared rides + your own solo rides.
-                </p>
-
-                <div className="budget-hero-stats">
-                  <div className="budget-stat-block">
-                    <span className="budget-stat-label">Daily allowance</span>
-                    <span className="budget-stat-val">{money.format(analytics.expectedDailyBudget)}</span>
-                    <span className="budget-stat-sub">Based on 4 days/wk</span>
-                  </div>
-                  <div className="budget-stat-block">
-                    <span className="budget-stat-label">Remaining per day</span>
-                    <span className="budget-stat-val" style={{ color: "var(--green)" }}>
-                      {money.format(analytics.remainBudgetPerDay)}
-                    </span>
-                    <span className="budget-stat-sub">
-                      {analytics.remainCollegeDays} college {analytics.remainCollegeDays === 1 ? "day" : "days"} left
-                    </span>
-                  </div>
-                </div>
-
-                <div className="budget-progress-wrap">
-                  <div className="budget-progress-bar">
-                    <div
-                      className={`budget-progress-fill ${analytics.personalWeekActualSpend > analytics.weeklyBudget ? "over" : ""}`}
-                      style={{
-                        width: `${Math.min(100, (analytics.personalWeekActualSpend / (analytics.weeklyBudget || 1)) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                  <div className="budget-progress-labels">
-                    <span>{money.format(analytics.personalWeekActualSpend)} of {money.format(analytics.weeklyBudget)}</span>
-                    <button
-                      type="button"
-                      style={{ border: 0, background: "none", color: "var(--green)", fontSize: "11px", fontWeight: 600, padding: 0 }}
-                      onClick={() => setModal("budget")}
-                    >
-                      Edit budget ✎
-                    </button>
-                  </div>
-                </div>
-
-                {/* 1-Tap Quick Budget Presets */}
-                <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap", marginTop: "12px" }}>
-                  <span style={{ fontSize: "11px", color: "var(--muted)", fontWeight: 600 }}>Presets:</span>
-                  {[400, 500, 600, 700, 800, 1000].map((amt) => (
-                    <button
-                      key={amt}
-                      type="button"
-                      className={`filter-chip ${weeklyBudget === amt ? "active" : ""}`}
-                      style={{ padding: "4px 8px", fontSize: "11px" }}
-                      onClick={() => handleSaveBudget(amt)}
-                    >
-                      {amt}
-                    </button>
-                  ))}
-                </div>
-              </section>
-
-              {/* Monthly Commute Projection: Current vs Expected vs Budget Limit */}
-              <section className="monthly-runrate-card">
-                <div className="section-header-row" style={{ margin: 0 }}>
-                  <h4 className="trend-chart-title">Monthly Commute Projection</h4>
-                </div>
-
-                {/* Prominent Average Spending Number Display */}
-                <div className="monthly-runrate-hero">
-                  <div className="monthly-runrate-hero-left">
-                    <span className="monthly-runrate-hero-label">Projected Average Monthly Spend</span>
-                    <strong className="monthly-runrate-hero-val">{money.format(analytics.monthlyMetrics.expectedMonthlySpend)}</strong>
-                    <span className="monthly-runrate-hero-sub">
-                      {analytics.monthlyMetrics.loggedDaysCount > 0
-                        ? `Avg ${money.format(analytics.monthlyMetrics.averageSpendPerDay)}/day across ${analytics.monthlyMetrics.loggedDaysCount} logged ${analytics.monthlyMetrics.loggedDaysCount === 1 ? "day" : "days"} × 16`
-                        : "No logged days yet"}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Progress Bar to Budget Limit with Average Spending Dotted Line Marker */}
-                <div className="monthly-progress-wrap">
-                  {/* Status text above bar to left */}
-                  <div style={{ display: "flex", justifyContent: "flex-start", alignItems: "center" }}>
-                    <span style={{ fontSize: "11px", fontWeight: 700, fontFamily: "DM Mono, monospace", color: analytics.monthlyMetrics.statusColor === "red" ? "var(--red)" : analytics.monthlyMetrics.statusColor === "yellow" ? "#d97706" : "var(--green)" }}>
-                      {analytics.monthlyMetrics.statusColor === "green" && "● Within budget"}
-                      {analytics.monthlyMetrics.statusColor === "yellow" && "▲ Above expected avg"}
-                      {analytics.monthlyMetrics.statusColor === "red" && "■ Near / over limit"}
-                    </span>
-                  </div>
-
-                  <div className="monthly-progress-track">
-                    {/* Current spending fill with dynamic color: green -> yellow after expected -> red near budget */}
-                    <div
-                      className={`monthly-progress-fill ${analytics.monthlyMetrics.statusColor}`}
-                      style={{
-                        width: `${Math.min(100, analytics.monthlyMetrics.pctOfLimit)}%`,
-                      }}
-                    />
-
-                    {/* Dotted Line where the average spending number lies in the progress bar */}
-                    {analytics.monthlyMetrics.expectedMonthlySpend > 0 && analytics.monthlyMetrics.monthlyBudgetLimit > 0 && (
-                      <div
-                        className="monthly-dotted-marker"
-                        style={{
-                          left: `${Math.min(100, Math.max(0, analytics.monthlyMetrics.pctOfExpectedOnLimit))}%`,
-                        }}
-                        title={`Expected Monthly Avg: ${money.format(analytics.monthlyMetrics.expectedMonthlySpend)}`}
-                      >
-                        <div className="monthly-dotted-marker-tag">
-                          Avg {money.format(analytics.monthlyMetrics.expectedMonthlySpend)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Below bar: Current spend to left, Budget limit to right */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--muted)", fontFamily: "DM Mono, monospace", marginTop: "4px" }}>
-                    <span>
-                      Current: <b style={{ color: "var(--ink)" }}>{money.format(analytics.monthlyMetrics.currentMonthSpend)}</b>
-                    </span>
-                    <span>
-                      Limit: <b style={{ color: "var(--ink)" }}>{money.format(analytics.monthlyMetrics.monthlyBudgetLimit)}</b>
-                    </span>
-                  </div>
-                </div>
-              </section>
-
-              {/* Bus Benchmark (EGP 42,000) - TOTAL Shared + Solo of Everyone vs Bus */}
-              <section className="bus-benchmark-wrap" style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", boxShadow: "var(--shadow-sm)" }}>
-                <div className="bus-benchmark-hero">
-                  <span style={{ fontSize: "11px", color: "var(--muted)" }}>University Bus Benchmark (EGP 42,000)</span>
-                  <span className="bus-benchmark-num">{money.format(analytics.busSavingsVal)}</span>
-                  <small style={{ color: "var(--muted)", fontSize: "11px" }}>
-                    {analytics.busSavingsVal >= 0
-                      ? `Saved so far vs EGP 42,000 bus pass (Total spend: ${money.format(analytics.totalGroupSpend)})`
-                      : `${money.format(Math.abs(analytics.busSavingsVal))} over EGP 42,000 bus pass (Total spend: ${money.format(analytics.totalGroupSpend)})`}
-                  </small>
-                </div>
-                <div className="bus-benchmark-meter">
-                  <div className="bus-meter-shared" style={{ width: `${Math.min(100, analytics.sharedBusUsedPct)}%` }} title={`Shared: ${money.format(analytics.allTripsSharedTotal)}`} />
-                  <div className="bus-meter-solo" style={{ width: `${Math.min(100 - Math.min(100, analytics.sharedBusUsedPct), analytics.soloBusUsedPct)}%` }} title={`Solo: ${money.format(analytics.allTripsSoloTotal)}`} />
-                </div>
-                <div className="bus-meter-labels">
-                  <span>{analytics.busUsedPctVal.toFixed(1)}% spent ({money.format(analytics.totalGroupSpend)} total shared + solo)</span>
-                  <span>{analytics.busSavedPctVal.toFixed(1)}% remaining</span>
-                </div>
-
-                {/* Own and other's spending breakdown with percentage of 42,000 */}
-                <div className="bus-member-split-section">
-                  <span className="bus-member-split-title">Member Payments & Personal Share</span>
-                  <div className="bus-member-cards-grid">
-                    <div className="bus-member-card">
-                      <span className="bus-member-label">You ({currentName})</span>
-                      <span className="bus-member-val">{money.format(analytics.personalAllTimeSpend)}</span>
-                      <span className="bus-member-sub" style={{ fontFamily: "DM Mono, monospace", fontWeight: 600 }}>
-                        {((analytics.personalAllTimeSpend / BUS_BENCHMARK) * 100).toFixed(1)}% of EGP 42,000
-                      </span>
-                    </div>
-                    <div className="bus-member-card">
-                      <span className="bus-member-label">{otherMember?.display_name || "Co-pilot"}</span>
-                      <span className="bus-member-val">{money.format(stats.personalSpendByOther)}</span>
-                      <span className="bus-member-sub" style={{ fontFamily: "DM Mono, monospace", fontWeight: 600 }}>
-                        {((stats.personalSpendByOther / BUS_BENCHMARK) * 100).toFixed(1)}% of EGP 42,000
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-            </main>
-          )}
-
-          {/* TAB 3: TRENDS (Charts, Drawings, Visual Commuter Breakdown & Scope) */}
-          {activeTab === "trends" && (
-            <main
-              className={`tab-content ${timeHorizon === "week" ? weekPaneClass : ""}`}
-              key={`tab-trends-${timeHorizon === "week" ? weekOffset : timeHorizon}`}
-              {...(timeHorizon === "week" ? weekSwipeHandlers : {})}
-            >
-              {/* Time Horizon Pills */}
-              <div className="filter-bar no-swipe">
-                {(["week", "4weeks", "3months", "lifetime"] as TimeHorizon[]).map((hz) => (
-                  <button
-                    key={hz}
-                    type="button"
-                    className={`filter-chip ${timeHorizon === hz ? "active" : ""}`}
-                    onClick={() => { setTimeHorizon(hz); setActiveDailyBar(null); setWeekSlide(null); }}
-                  >
-                    {hz === "week" ? "Week" : hz === "4weeks" ? "4 Weeks" : hz === "3months" ? "3 Months" : "All time"}
-                  </button>
-                ))}
-              </div>
-
-              {timeHorizon === "week" && renderWeekSwitcher()}
-
-              {/* Summary Cards: Total Spent & Shared Only */}
-              <div className="analytics-summary-trio">
-                <div className="trio-card primary-trio">
-                  <span className="trio-label">Total Spent</span>
-                  <strong className="trio-value">{money.format(analytics.totalSpend)}</strong>
-                  <small className="trio-sub">Shared + Solo ({analytics.totalRides} rides)</small>
-                </div>
-                <div className="trio-card">
-                  <span className="trio-label">Shared Only</span>
-                  <strong className="trio-value">{money.format(analytics.sharedSpendVal)}</strong>
-                  <small className="trio-sub">{analytics.sharedRidesCount} rides</small>
-                </div>
-              </div>
-
-              {/* 1. NON-CUMULATIVE DAILY SPENDING BAR CHART */}
-              <section className="trend-chart-card">
-                <div className="trend-chart-header">
-                  <div>
-                    <h4 className="trend-chart-title">Daily Commute Spending</h4>
-                    <span className="trend-chart-subtitle">Discrete spending per active day (non-cumulative)</span>
-                  </div>
-                  <div className="trend-chart-stat">
-                    <span className="trend-chart-stat-val">{money.format(analytics.dailySpendingAvg)}</span>
-                    <span className="trend-chart-stat-sub">Daily active avg</span>
-                  </div>
-                </div>
-
-                {analytics.dailySpendingSeries.length === 0 ? (
-                  <div style={{ height: "120px", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--muted)", fontSize: "12px" }}>
-                    No rides recorded in this time window.
-                  </div>
-                ) : (
-                  <div className="trend-chart-container">
-                    {activeDailyBar && (
-                      <div className="trend-tooltip">
-                        <span><b>{activeDailyBar.label}</b> ({activeDailyBar.dayName})</span>
-                        <span>·</span>
-                        <span className="trend-tooltip-val">{money.format(activeDailyBar.amount)}</span>
-                        <span>·</span>
-                        <span>{activeDailyBar.ridesCount} {activeDailyBar.ridesCount === 1 ? "ride" : "rides"}</span>
-                      </div>
-                    )}
-                    {(() => {
-                      const series = analytics.dailySpendingSeries;
-                      const maxVal = Math.max(...series.map((p) => p.amount), analytics.dailySpendingAvg * 1.25, 40);
-                      const width = 340;
-                      const height = 140;
-                      const padLeft = 14;
-                      const padRight = 14;
-                      const padTop = 22;
-                      const padBottom = 26;
-                      const chartW = width - padLeft - padRight;
-                      const chartH = height - padTop - padBottom;
-                      const avgY = padTop + chartH - (analytics.dailySpendingAvg / maxVal) * chartH;
-
-                      return (
-                        <div className="daily-bar-chart-container">
-                          <svg className="daily-bar-svg" viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none">
-                            <defs>
-                              <linearGradient id="barGradient" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="0%" stopColor="#2d6a4f" />
-                                <stop offset="100%" stopColor="#40916c" />
-                              </linearGradient>
-                            </defs>
-
-                            {/* Average baseline */}
-                            <line
-                              x1={padLeft}
-                              y1={avgY}
-                              x2={width - padRight}
-                              y2={avgY}
-                              stroke="#c8c2b4"
-                              strokeDasharray="3 3"
-                              strokeWidth="1"
-                            />
-                            <text
-                              x={width - padRight}
-                              y={Math.max(padTop - 4, avgY - 4)}
-                              textAnchor="end"
-                              fontSize="8"
-                              fontFamily="DM Mono, monospace"
-                              fill="#888e84"
-                            >
-                              avg {Math.round(analytics.dailySpendingAvg)}
-                            </text>
-
-                            {/* Bottom baseline */}
-                            <line
-                              x1={padLeft}
-                              y1={padTop + chartH}
-                              x2={width - padRight}
-                              y2={padTop + chartH}
-                              stroke="#ede9df"
-                              strokeWidth="1"
-                            />
-
-                            {/* Daily Bars */}
-                            {series.map((p, idx) => {
-                              const barW = Math.min(26, Math.max(12, chartW / series.length - 8));
-                              const x = padLeft + (idx + 0.5) * (chartW / series.length) - barW / 2;
-                              const barH = Math.max(4, (p.amount / maxVal) * chartH);
-                              const y = padTop + chartH - barH;
-                              const isSelected = activeDailyBar?.date === p.date;
-
-                              return (
-                                <g key={p.date}>
-                                  <rect
-                                    x={x}
-                                    y={y}
-                                    width={barW}
-                                    height={barH}
-                                    rx={4}
-                                    className={`daily-chart-bar ${isSelected ? "active" : ""}`}
-                                    fill={isSelected ? "var(--lime)" : "url(#barGradient)"}
-                                    onClick={() => setActiveDailyBar(isSelected ? null : p)}
-                                  />
-                                  {/* Day label */}
-                                  <text
-                                    x={x + barW / 2}
-                                    y={height - 8}
-                                    textAnchor="middle"
-                                    fontSize="9"
-                                    fontFamily="DM Mono, monospace"
-                                    fill={isSelected ? "var(--green)" : "var(--muted)"}
-                                    fontWeight={isSelected ? "800" : "500"}
-                                  >
-                                    {p.dayName}
-                                  </text>
-                                  {/* Value label above bar */}
-                                  <text
-                                    x={x + barW / 2}
-                                    y={y - 4}
-                                    textAnchor="middle"
-                                    fontSize="8"
-                                    fontFamily="DM Mono, monospace"
-                                    fontWeight="700"
-                                    fill={isSelected ? "var(--green)" : "#525950"}
-                                  >
-                                    {Math.round(p.amount)}
-                                  </text>
-                                </g>
-                              );
-                            })}
-                          </svg>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                )}
-              </section>
-
-              {/* 2. VISUAL COMMUTER ROUTE DRAWING (Campus vs Home) */}
-              <section className="commute-diagram-card">
-                <div className="section-header-row" style={{ margin: 0 }}>
-                  <h4 className="trend-chart-title">Commute Route Breakdown</h4>
-                  <span className="section-header-meta">Direction split</span>
-                </div>
-                <div className="commute-routes-grid">
-                  {/* Route 1: To Campus */}
-                  <div className="commute-route-box campus">
-                    <div className="commute-route-header">
-                      <div className="commute-route-icon">🎓</div>
-                      <div>
-                        <span className="commute-route-title">Morning to Campus</span>
-                        <div className="commute-route-spend">{money.format(analytics.campusSpend)}</div>
-                      </div>
-                    </div>
-                    <div className="commute-route-meta">
-                      <span>{analytics.campusTrips.length} rides</span>
-                      <span>{analytics.campusTrips.length > 0 ? money.format(analytics.campusSpend / analytics.campusTrips.length) : "0"} avg</span>
-                    </div>
-                    <div className="commute-split-bar">
-                      <div className="commute-split-shared" style={{ width: `${analytics.campusTrips.length > 0 ? (analytics.campusSharedCount / analytics.campusTrips.length) * 100 : 50}%` }} title={`${analytics.campusSharedCount} shared`} />
-                      <div className="commute-split-solo" style={{ width: `${analytics.campusTrips.length > 0 ? (analytics.campusSoloCount / analytics.campusTrips.length) * 100 : 50}%` }} title={`${analytics.campusSoloCount} solo`} />
-                    </div>
-                  </div>
-
-                  {/* Route 2: Back Home */}
-                  <div className="commute-route-box home">
-                    <div className="commute-route-header">
-                      <div className="commute-route-icon">🏡</div>
-                      <div>
-                        <span className="commute-route-title">Evening Back Home</span>
-                        <div className="commute-route-spend">{money.format(analytics.homeSpend)}</div>
-                      </div>
-                    </div>
-                    <div className="commute-route-meta">
-                      <span>{analytics.homeTrips.length} rides</span>
-                      <span>{analytics.homeTrips.length > 0 ? money.format(analytics.homeSpend / analytics.homeTrips.length) : "0"} avg</span>
-                    </div>
-                    <div className="commute-split-bar">
-                      <div className="commute-split-shared" style={{ width: `${analytics.homeTrips.length > 0 ? (analytics.homeSharedCount / analytics.homeTrips.length) * 100 : 50}%` }} title={`${analytics.homeSharedCount} shared`} />
-                      <div className="commute-split-solo" style={{ width: `${analytics.homeTrips.length > 0 ? (analytics.homeSoloCount / analytics.homeTrips.length) * 100 : 50}%` }} title={`${analytics.homeSoloCount} solo`} />
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* 3. SOLO RIDES SCOPE SELECTOR & DEEP DIVE */}
-              <section style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "var(--shadow-sm)" }}>
-                <div className="solo-scope-wrap">
-                  <span className="solo-scope-label">Solo Rides Filter</span>
-                  <div className="solo-scope-bar">
-                    <button
-                      type="button"
-                      className={`solo-scope-chip ${soloScope === "mine" ? "active" : ""}`}
-                      onClick={() => setSoloScope("mine")}
-                    >
-                      👤 My solo only
-                    </button>
-                    <button
-                      type="button"
-                      className={`solo-scope-chip ${soloScope === "all" ? "active" : ""}`}
-                      onClick={() => setSoloScope("all")}
-                    >
-                      👥 All solo
-                    </button>
-                    <button
-                      type="button"
-                      className={`solo-scope-chip ${soloScope === "others" ? "active" : ""}`}
-                      onClick={() => setSoloScope("others")}
-                    >
-                      🤝 Others solo
-                    </button>
-                  </div>
-                </div>
-                <p style={{ margin: 0, fontSize: "11px", color: "var(--muted)" }}>
-                  {soloScope === "mine" && "Calculating solo rides taken exclusively by you."}
-                  {soloScope === "all" && "Calculating all solo rides taken by any member in this group."}
-                  {soloScope === "others" && "Calculating solo rides taken by your co-pilot."}
-                </p>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginTop: "4px" }}>
-                  <div style={{ background: "#fbf9f4", padding: "10px 12px", borderRadius: "8px", border: "1px solid #ede8dc" }}>
-                    <span style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600, fontFamily: '"DM Mono", monospace' }}>Spend</span>
-                    <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--ink)", marginTop: "2px" }}>{money.format(analytics.soloSpendVal)}</div>
-                  </div>
-                  <div style={{ background: "#fbf9f4", padding: "10px 12px", borderRadius: "8px", border: "1px solid #ede8dc" }}>
-                    <span style={{ fontSize: "10px", color: "var(--muted)", textTransform: "uppercase", fontWeight: 600, fontFamily: '"DM Mono", monospace' }}>Rides & Average</span>
-                    <div style={{ fontSize: "18px", fontWeight: 800, color: "var(--ink)", marginTop: "2px" }}>
-                      {analytics.soloRidesCount} <span style={{ fontSize: "12px", fontWeight: 500, color: "var(--muted)" }}>({money.format(analytics.soloAvgCost)})</span>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              {/* 5. 2x2 DIRECTION & MODE MATRIX */}
-              <section style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "var(--shadow-sm)" }}>
-                <div className="section-header-row" style={{ margin: 0 }}>
-                  <h4 className="trend-chart-title">Direction & Mode Matrix</h4>
-                  <span className="section-header-meta">Campus vs Home × Shared vs Solo</span>
-                </div>
-                <div className="matrix-mini-grid">
-                  <div className="matrix-mini-quadrant">
-                    <span className="matrix-quadrant-title">To Campus · Shared</span>
-                    <span className="matrix-quadrant-spend">{money.format(analytics.matrix.toCampus.shared.spend)}</span>
-                    <span className="matrix-quadrant-meta">{analytics.matrix.toCampus.shared.count} rides</span>
-                  </div>
-                  <div className="matrix-mini-quadrant">
-                    <span className="matrix-quadrant-title">To Campus · Solo</span>
-                    <span className="matrix-quadrant-spend">{money.format(analytics.matrix.toCampus.solo.spend)}</span>
-                    <span className="matrix-quadrant-meta">{analytics.matrix.toCampus.solo.count} rides</span>
-                  </div>
-                  <div className="matrix-mini-quadrant">
-                    <span className="matrix-quadrant-title">Back Home · Shared</span>
-                    <span className="matrix-quadrant-spend">{money.format(analytics.matrix.backHome.shared.spend)}</span>
-                    <span className="matrix-quadrant-meta">{analytics.matrix.backHome.shared.count} rides</span>
-                  </div>
-                  <div className="matrix-mini-quadrant">
-                    <span className="matrix-quadrant-title">Back Home · Solo</span>
-                    <span className="matrix-quadrant-spend">{money.format(analytics.matrix.backHome.solo.spend)}</span>
-                    <span className="matrix-quadrant-meta">{analytics.matrix.backHome.solo.count} rides</span>
-                  </div>
-                </div>
-              </section>
-
-              {/* 6. FACTUAL COMMUTE INSIGHTS */}
-              <section style={{ background: "#fff", border: "1px solid var(--line)", borderRadius: "var(--radius-lg)", padding: "16px", display: "flex", flexDirection: "column", gap: "10px", boxShadow: "var(--shadow-sm)" }}>
-                <div className="section-header-row" style={{ margin: 0 }}>
-                  <h4 className="trend-chart-title">Smart Routine Insights</h4>
-                  <span className="section-header-meta">{analytics.factualInsights.length} observations</span>
-                </div>
-                <div className="insights-stack">
-                  {analytics.factualInsights.map((insight, idx) => (
-                    <div key={idx} className="insight-pill">
-                      <span className="insight-bullet" />
-                      <span>{insight}</span>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </main>
-          )}
-
-          {/* TAB 4: SPACE (Group Info, Budget, Settings, Auth) */}
-          {activeTab === "space" && (
-            <main className="tab-content" key="tab-space">
-              {/* Settlement Status Card */}
-              <section className="split-summary-card">
-                <div className="section-header-row">
-                  <h3 className="section-header-title">Settlement status</h3>
-                  <span className="section-header-meta">50/50 split</span>
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: "6px", padding: "16px", background: "#f8f6f0", borderRadius: "var(--radius-md)", border: "1px solid #ece9df" }}>
-                  <span style={{ fontSize: "11px", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.06em", fontFamily: '"DM Mono", monospace', fontWeight: 600 }}>
-                    Net Balance
-                  </span>
-                  <div style={{ fontSize: "24px", fontWeight: 700, letterSpacing: "-1px", color: "var(--ink)" }}>
-                    {stats.net === 0
-                      ? "All square 🎉"
-                      : stats.net > 0
-                      ? `${otherMember?.display_name ?? "Khaled"} owes you ${money.format(stats.net)}`
-                      : `You owe ${otherMember?.display_name ?? "Khaled"} ${money.format(Math.abs(stats.net))}`}
-                  </div>
-                  <span style={{ fontSize: "12px", color: "var(--muted)" }}>
-                    {stats.net === 0
-                      ? "No pending shared rides right now."
-                      : `${unsettledTrips.length} unsettled shared ${unsettledTrips.length === 1 ? "ride" : "rides"}.`}
-                  </span>
-                  {unsettledTrips.length > 0 && (
-                    <button
-                      type="button"
-                      className="sheet-submit-btn"
-                      style={{ marginTop: "8px", padding: "8px 14px", fontSize: "12px" }}
-                      onClick={() => {
-                        setActiveTab("rides");
-                        setRidesFilter("unsettled");
-                      }}
-                    >
-                      Review Unsettled Rides in Feed
+                <>
+                  {hasPasskey && (
+                    <button type="button" className="btn btn-primary btn-wide" onClick={() => void signInWithPasskey()}>
+                      <Icon name="key" size={18} />
+                      Sign in with Face ID
                     </button>
                   )}
-                </div>
-              </section>
-
-              <section className="space-card">
-                <div className="space-info-group">
-                  <span className="balance-hero-eyebrow">Shared Ride Space</span>
-                  <h3 className="space-info-title">{group.name}</h3>
-                </div>
-
-                <div className="space-code-box">
-                  <div>
-                    <span style={{ fontSize: "11px", color: "var(--muted)", display: "block" }}>Invite Code</span>
-                    <span className="space-code-text">{group.invite_code}</span>
-                  </div>
-                  <button
-                    type="button"
-                    className="copy-code-btn"
-                    onClick={() => {
-                      void navigator.clipboard.writeText(group.invite_code);
-                      notify("Invite code copied!", "success");
-                    }}
-                  >
-                    Copy
+                  <button type="button" className={`btn btn-wide ${hasPasskey ? "btn-quiet" : "btn-primary"}`} onClick={() => setModal("sign-in")}>
+                    Sign in with Google
                   </button>
-                </div>
-              </section>
-
-              <div className="settings-list">
-                <button
-                  type="button"
-                  className="settings-item-btn"
-                  onClick={() => setModal("budget")}
-                >
-                  <div className="settings-item-title">
-                    <span>📅</span>
-                    <div>
-                      <div>Weekly Budget Routine</div>
-                      <span className="settings-item-sub">{money.format(weeklyBudget)}/wk ({money.format(weeklyBudget / 4)}/day across 4 college days)</span>
-                    </div>
-                  </div>
-                  <span style={{ color: "var(--muted)" }}>›</span>
-                </button>
-
-                <button
-                  type="button"
-                  className="settings-item-btn"
-                  onClick={() => setModal("shortcut")}
-                >
-                  <div className="settings-item-title">
-                    <span>⚡</span>
-                    <div>
-                      <div>Add iOS Shortcut</div>
-                      <span className="settings-item-sub">Log rides via Siri / Home Screen (Amount, Mode, Payer)</span>
-                    </div>
-                  </div>
-                  <span style={{ color: "var(--muted)" }}>›</span>
-                </button>
-
-                {nativeApp && (
-                  <button
-                    type="button"
-                    className="settings-item-btn"
-                    onClick={() => void handleNotificationSetup()}
-                  >
-                    <div className="settings-item-title">
-                      <span>🔔</span>
-                      <div>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <span>Ride Notifications</span>
-                          {notificationPermission === "granted" && (
-                            <span style={{ fontSize: "10px", fontWeight: 700, color: "#059669", background: "#d1fae5", padding: "1px 6px", borderRadius: "100px" }}>
-                              On ✓
-                            </span>
-                          )}
-                        </div>
-                        <span className="settings-item-sub">
-                          {notificationPermission === "granted"
-                            ? "Alerts when a ride is auto-logged · Tap to send a test"
-                            : notificationPermission === "denied"
-                            ? "Turned off in iPhone Settings"
-                            : "Tap to allow alerts for auto-logged rides"}
-                        </span>
-                      </div>
-                    </div>
-                    <span style={{ color: "var(--muted)" }}>›</span>
-                  </button>
-                )}
-
-                {supabase && user && (
-                  <button
-                    type="button"
-                    className="settings-item-btn"
-                    disabled={ntfyTesting}
-                    onClick={() => void handleNtfyTest()}
-                  >
-                    <div className="settings-item-title">
-                      <span>📣</span>
-                      <div>
-                        <div>{ntfyTesting ? "Sending…" : "Test ntfy Notification"}</div>
-                        <span className="settings-item-sub">Send a test alert to the ntfy app</span>
-                      </div>
-                    </div>
-                    <span style={{ color: "var(--muted)" }}>›</span>
-                  </button>
-                )}
-
-                {supabase && user && !nativeApp && (
-                  <div style={{ display: "flex", gap: "8px", alignItems: "center" }}>
-                    <button
-                      type="button"
-                      className="settings-item-btn"
-                      style={{ flex: 1 }}
-                      onClick={() => void (hasPasskey ? verifyPasskey() : registerPasskey())}
-                    >
-                      <div className="settings-item-title">
-                        <span>🔑</span>
-                        <div>
-                          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                            <span>Biometric Passkey</span>
-                            {hasPasskey && (
-                              <span style={{ fontSize: "10px", fontWeight: 700, color: "#059669", background: "#d1fae5", padding: "1px 6px", borderRadius: "100px" }}>
-                                Active ✓
-                              </span>
-                            )}
-                          </div>
-                          <span className="settings-item-sub">
-                            {hasPasskey ? "Face ID / Touch ID active · Tap to verify" : "Enable Face ID / fingerprint for fast access"}
-                          </span>
-                        </div>
-                      </div>
-                      <span style={{ color: "var(--muted)" }}>›</span>
-                    </button>
-                    {hasPasskey && (
-                      <button
-                        type="button"
-                        aria-label="Remove Passkey"
-                        title="Remove Passkey from this device"
-                        onClick={removePasskey}
-                        style={{
-                          background: "none",
-                          border: "none",
-                          color: "var(--muted)",
-                          fontSize: "14px",
-                          cursor: "pointer",
-                          padding: "10px",
-                          borderRadius: "8px",
-                        }}
-                      >
-                        ✕
-                      </button>
-                    )}
-                  </div>
-                )}
-
-                {supabase && user ? (
-                  <button
-                    type="button"
-                    className="settings-item-btn"
-                    onClick={() => {
-                      void supabase.auth.signOut();
-                      setGroup(null);
-                      notify("Signed out.", "info");
-                    }}
-                  >
-                    <div className="settings-item-title" style={{ color: "#a84942" }}>
-                      <span>🚪</span>
-                      <div>
-                        <div>Sign Out</div>
-                        <span className="settings-item-sub">{user.email ?? currentName}</span>
-                      </div>
-                    </div>
-                    <span style={{ color: "#a84942" }}>›</span>
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="settings-item-btn"
-                    onClick={() => setModal("sign-in")}
-                  >
-                    <div className="settings-item-title">
-                      <span>👤</span>
-                      <div>
-                        <div>Sign In with Google</div>
-                        <span className="settings-item-sub">Access your cloud shared workspace</span>
-                      </div>
-                    </div>
-                    <span style={{ color: "var(--muted)" }}>›</span>
-                  </button>
-                )}
-              </div>
-            </main>
-          )}
-        </>
-      )}
+                </>
+              )}
+            </div>
+          </main>
+        ) : (
+          <div key={activeTab} className="tab-wrap">
+            {activeTab === "today" && (
+              <TodayTab
+                net={stats.net}
+                unsettledCount={unsettledTrips.length}
+                otherName={otherName}
+                today={todayMetrics}
+                week={week}
+                weekOffset={weekOffset}
+                weekSlide={weekSlide}
+                onChangeWeek={changeWeek}
+                onThisWeek={jumpToCurrentWeek}
+                swipeHandlers={weekSwipeHandlers}
+                latest={recentTrips.slice(0, 4)}
+                totalRides={recentTrips.length}
+                members={members}
+                currentUserId={currentUserId}
+                rideActions={rideActions}
+                onLog={() => requestAction("add")}
+                onSettleUp={showUnsettled}
+                onSeeAll={() => {
+                  setRidesFilter("all");
+                  setActiveTab("rides");
+                }}
+                onEditBudget={() => setModal("budget")}
+              />
+            )}
+            {activeTab === "rides" && (
+              <RidesTab
+                trips={recentTrips}
+                filter={ridesFilter}
+                onFilter={setRidesFilter}
+                members={members}
+                currentUserId={currentUserId}
+                rideActions={rideActions}
+                onLog={() => requestAction("add")}
+              />
+            )}
+            {activeTab === "months" && (
+              <MonthsTab
+                months={months}
+                trips={trips}
+                weeklyBudget={weeklyBudget}
+                members={members}
+                currentUserId={currentUserId}
+                otherName={otherName}
+                otherId={otherMember?.user_id ?? null}
+                rideActions={rideActions}
+                onEditBudget={() => setModal("budget")}
+              />
+            )}
+            {activeTab === "space" && (
+              <SpaceTab
+                group={group}
+                members={members}
+                currentName={currentName}
+                email={user?.email}
+                net={stats.net}
+                otherName={otherName}
+                unsettledCount={unsettledTrips.length}
+                weeklyBudget={weeklyBudget}
+                signedIn={Boolean(user)}
+                cloud={Boolean(supabase)}
+                nativeApp={nativeApp}
+                notificationPermission={notificationPermission}
+                hasPasskey={hasPasskey}
+                ntfyTesting={ntfyTesting}
+                onReviewUnsettled={showUnsettled}
+                onCopyCode={() => {
+                  void navigator.clipboard.writeText(group.invite_code);
+                  notify("Invite code copied.", "success");
+                }}
+                onBudget={() => setModal("budget")}
+                onShortcut={() => setModal("shortcut")}
+                onNotifications={() => void handleNotificationSetup()}
+                onNtfyTest={() => void handleNtfyTest()}
+                onPasskey={() => void (hasPasskey ? verifyPasskey() : registerPasskey())}
+                onRemovePasskey={removePasskey}
+                onSignOut={() => {
+                  void supabase?.auth.signOut();
+                  setGroup(null);
+                  notify("Signed out.", "info");
+                }}
+                onSignIn={() => setModal("sign-in")}
+              />
+            )}
+          </div>
+        )}
       </div>
 
-      {/* FIXED BOTTOM NAVIGATION BAR */}
-      <nav className="bottom-nav-bar" aria-label="Main Navigation">
-        <button
-          type="button"
-          className={`nav-tab-btn ${activeTab === "rides" ? "active" : ""}`}
-          onClick={() => setActiveTab("rides")}
-        >
-          <span className="nav-tab-icon">🚘</span>
-          <span className="nav-tab-label">Rides</span>
-        </button>
+      {group && (
+        <nav className="nav" aria-label="Main">
+          {TABS.slice(0, 2).map((tab) => (
+            <button key={tab.id} type="button" className={`nav-tab ${activeTab === tab.id ? "is-on" : ""}`} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => setActiveTab(tab.id)}>
+              <Icon name={tab.icon} size={24} />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+          <button type="button" className="nav-tab nav-log" onClick={() => requestAction("add")}>
+            <Icon name="plus" size={28} />
+            <span>Log ride</span>
+          </button>
+          {TABS.slice(2).map((tab) => (
+            <button key={tab.id} type="button" className={`nav-tab ${activeTab === tab.id ? "is-on" : ""}`} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => setActiveTab(tab.id)}>
+              <Icon name={tab.icon} size={24} />
+              <span>{tab.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
 
-        <button
-          type="button"
-          className={`nav-tab-btn ${activeTab === "budget" ? "active" : ""}`}
-          onClick={() => setActiveTab("budget")}
-        >
-          <span className="nav-tab-icon">🎯</span>
-          <span className="nav-tab-label">Budget</span>
-        </button>
-
-        {/* Center Prominent FAB for Logging a Ride Fast */}
-        <button
-          type="button"
-          className="nav-fab-btn"
-          onClick={() => requestAction("add")}
-          aria-label="Log new ride"
-        >
-          +
-        </button>
-
-        <button
-          type="button"
-          className={`nav-tab-btn ${activeTab === "trends" ? "active" : ""}`}
-          onClick={() => setActiveTab("trends")}
-        >
-          <span className="nav-tab-icon">📈</span>
-          <span className="nav-tab-label">Trends</span>
-        </button>
-
-        <button
-          type="button"
-          className={`nav-tab-btn ${activeTab === "space" ? "active" : ""}`}
-          onClick={() => setActiveTab("space")}
-        >
-          <span className="nav-tab-icon">⚙️</span>
-          <span className="nav-tab-label">Space</span>
-        </button>
-      </nav>
-
-      {/* NATIVE BOTTOM SHEET MODAL */}
       {modal && (
-        <BottomSheetWindow
-          modal={modal}
-          close={() => { setModal(null); setEditingTrip(null); setShortcutPreFill(null); }}
+        <Sheet
+          kind={modal}
+          close={() => {
+            setModal(null);
+            setEditingTrip(null);
+            setShortcutPreFill(null);
+          }}
           members={members}
           group={group}
           user={user}
           editingTrip={editingTrip}
-          shortcutPreFill={shortcutPreFill}
-          supabaseEnabled={Boolean(supabase)}
+          prefill={shortcutPreFill}
           notify={notify}
           weeklyBudget={weeklyBudget}
           onSaveBudget={handleSaveBudget}
@@ -2207,7 +1013,7 @@ export default function Home() {
             if (result.error) return notify(result.error.message, "error");
             await loadWorkspace(user.id, false);
             setModal("share");
-            notify("Shared space created! Invite code ready.", "success");
+            notify("Space created. Your invite code is ready.", "success");
           }}
           onJoin={async (code, person) => {
             if (!supabase || !user) return;
@@ -2215,7 +1021,7 @@ export default function Home() {
             if (result.error) return notify(result.error.message, "error");
             await loadWorkspace(user.id, false);
             setModal(null);
-            notify("Joined shared space!", "success");
+            notify("You joined the space.", "success");
           }}
           onSignIn={async () => {
             if (!supabase) return;
@@ -2231,846 +1037,12 @@ export default function Home() {
           hasPasskey={hasPasskey}
           onSignInPasskey={signInWithPasskey}
           onRefreshWorkspace={async (knownTripId?: string) => {
-            // The sheet already showed its own "Auto-logged" toast for this ride.
+            // The sheet already showed its own toast for this ride.
             markTripSeen(knownTripId);
             if (user) await loadWorkspace(user.id, false);
           }}
         />
       )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// NATIVE BOTTOM SHEET COMPONENT (FAST, PRECISE, MOBILE-FIRST)
-// ---------------------------------------------------------------------------
-function BottomSheetWindow({
-  modal,
-  close,
-  members,
-  group,
-  user,
-  editingTrip,
-  shortcutPreFill,
-  supabaseEnabled,
-  notify,
-  weeklyBudget,
-  onSaveBudget,
-  onAdd,
-  onCreate,
-  onJoin,
-  onSignIn,
-  hasPasskey,
-  onSignInPasskey,
-  onRefreshWorkspace,
-}: {
-  modal: Exclude<Modal, null>;
-  close: () => void;
-  members: Member[];
-  group: RideGroup | null;
-  user: AuthUser;
-  editingTrip: Trip | null;
-  shortcutPreFill?: { amount?: string; mode?: "shared" | "solo"; paidBy?: string } | null;
-  supabaseEnabled: boolean;
-  notify: (message: string, type?: "success" | "error" | "info") => void;
-  weeklyBudget: number;
-  onSaveBudget: (budget: number) => void;
-  onAdd: (event: FormEvent<HTMLFormElement>) => Promise<void>;
-  onCreate: (name: string, person: string) => Promise<void>;
-  onJoin: (code: string, person: string) => Promise<void>;
-  onSignIn: () => Promise<void>;
-  hasPasskey?: boolean;
-  onSignInPasskey?: () => Promise<void>;
-  onRefreshWorkspace?: (knownTripId?: string) => Promise<void>;
-}) {
-  const now = new Date();
-  const localTime = new Date(now.getTime() - now.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-  const tripDate = editingTrip
-    ? new Date(new Date(editingTrip.ride_at).getTime() - new Date(editingTrip.ride_at).getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
-    : localTime;
-
-  const matchedPayer = shortcutPreFill?.paidBy
-    ? members.find(
-        (m) =>
-          m.user_id === shortcutPreFill.paidBy ||
-          m.display_name.toLowerCase() === shortcutPreFill.paidBy?.toLowerCase()
-      )?.user_id
-    : undefined;
-
-  const [tripMode, setTripMode] = useState<Trip["trip_mode"]>(
-    editingTrip?.trip_mode ?? shortcutPreFill?.mode ?? "shared"
-  );
-  const [direction, setDirection] = useState<Trip["direction"]>(
-    editingTrip?.direction ?? (now.getHours() < 13 ? "campus" : "home")
-  );
-  const [amount, setAmount] = useState<string>(
-    editingTrip ? String(editingTrip.amount) : shortcutPreFill?.amount ? String(shortcutPreFill.amount) : ""
-  );
-  const [amountBump, setAmountBump] = useState(0);
-  const [paidBy, setPaidBy] = useState<string>(
-    editingTrip?.paid_by ?? matchedPayer ?? user?.id ?? members[0]?.user_id ?? "omar"
-  );
-  const [soloBy, setSoloBy] = useState<string>(
-    editingTrip?.solo_by ?? matchedPayer ?? user?.id ?? members[0]?.user_id ?? "omar"
-  );
-  const [closing, setClosing] = useState(false);
-  const [shortcutMode, setShortcutMode] = useState<"email" | "manual">("email");
-  const [testReceiptText, setTestReceiptText] = useState("");
-  const [testParsing, setTestParsing] = useState(false);
-
-  async function handleTestParseReceipt() {
-    if (!testReceiptText.trim()) {
-      return notify("Paste an Uber or DiDi email receipt first.", "info");
-    }
-    setTestParsing(true);
-    try {
-      const res = await fetch("/api/trips", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          group_code: group?.invite_code,
-          email_body: testReceiptText,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok || data.error) {
-        throw new Error(data.error || "Failed to parse receipt");
-      }
-      const svc = data.parsed_receipt?.service ? data.parsed_receipt.service.toUpperCase() : "Ride";
-      const amt = data.parsed_receipt?.amount ?? data.trip?.amount;
-      const dir = data.parsed_receipt?.direction ?? data.trip?.direction;
-      notify(`Auto-logged ${svc}: EGP ${amt} (${dir === "campus" ? "To Campus" : "Going Home"})!`, "success");
-      setTestReceiptText("");
-      handleClose();
-      if (onRefreshWorkspace) await onRefreshWorkspace(data.trip?.id);
-    } catch (err: any) {
-      notify(err?.message || "Failed to auto-detect receipt.", "error");
-    } finally {
-      setTestParsing(false);
-    }
-  }
-
-  function handleClose() {
-    if (closing) return;
-    setClosing(true);
-    setTimeout(() => {
-      close();
-    }, 240);
-  }
-
-  // Prevent background scroll and page jumps when bottom sheet is open
-  useEffect(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prevOverflow;
-    };
-  }, []);
-
-  async function handleSubmitRide(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (closing) return;
-    setClosing(true);
-    await onAdd(e);
-    setTimeout(() => {
-      close();
-    }, 240);
-  }
-
-  return (
-    <div className={`bottom-sheet-backdrop ${closing ? "closing" : ""}`} onClick={handleClose}>
-      <div className={`bottom-sheet ${closing ? "closing" : ""}`} onClick={(e) => e.stopPropagation()}>
-        <div className="bottom-sheet-handle" />
-
-        <div className="bottom-sheet-header">
-          <h3 className="bottom-sheet-title">
-            {modal === "add" && "Log ride"}
-            {modal === "edit" && "Edit ride"}
-            {modal === "budget" && "Set weekly budget"}
-            {modal === "shortcut" && "iOS Shortcut Setup"}
-            {modal === "sign-in" && "Sign in with Google"}
-            {modal === "create-space" && "Create shared space"}
-            {modal === "join-space" && "Join shared space"}
-            {modal === "share" && "Invite co-pilot"}
-          </h3>
-          <button type="button" className="bottom-sheet-close" onClick={handleClose} aria-label="Close sheet">
-            ✕
-          </button>
-        </div>
-
-        {/* ADD / EDIT RIDE SHEET (ULTRA FAST) */}
-        {(modal === "add" || modal === "edit") && (
-          <form onSubmit={handleSubmitRide} className="sheet-form">
-            {/* Big Tactile Amount Input */}
-            <div className="hero-amount-box">
-              <div className="hero-amount-wrap" key={`amount-bump-${amountBump}`}>
-                <span className="hero-amount-curr">EGP</span>
-                <input
-                  name="amount"
-                  type="number"
-                  inputMode="decimal"
-                  step="0.01"
-                  min="1"
-                  required
-                  placeholder="0"
-                  value={amount}
-                  onChange={(e) => setAmount(e.target.value)}
-                  className={`hero-amount-input ${(amount || "").length > 5 ? "long" : ""}`}
-                  style={{ width: `${Math.max(1, (amount || "0").length) + 0.3}ch` }}
-                />
-              </div>
-              <div className="amount-presets">
-                {[60, 90, 110, 125, 150].map((preset) => (
-                  <button
-                    key={preset}
-                    type="button"
-                    className="amount-preset-chip"
-                    onClick={() => {
-                      setAmount(String(preset));
-                      setAmountBump((n) => n + 1);
-                    }}
-                  >
-                    +{preset}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Direction Segmented Control */}
-            <div className="segmented-group">
-              <span className="segmented-label">Direction</span>
-              <input type="hidden" name="direction" value={direction} />
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  className={`segmented-btn ${direction === "campus" ? "active" : ""}`}
-                  onClick={() => setDirection("campus")}
-                >
-                  🎓 To campus
-                </button>
-                <button
-                  type="button"
-                  className={`segmented-btn ${direction === "home" ? "active" : ""}`}
-                  onClick={() => setDirection("home")}
-                >
-                  🏡 Back home
-                </button>
-              </div>
-            </div>
-
-            {/* Mode Segmented Control */}
-            <div className="segmented-group">
-              <span className="segmented-label">Ride Type</span>
-              <input type="hidden" name="tripMode" value={tripMode} />
-              <div className="segmented-control">
-                <button
-                  type="button"
-                  className={`segmented-btn ${tripMode === "shared" ? "active" : ""}`}
-                  onClick={() => setTripMode("shared")}
-                >
-                  👥 Shared (50/50)
-                </button>
-                <button
-                  type="button"
-                  className={`segmented-btn ${tripMode === "solo" ? "active" : ""}`}
-                  onClick={() => setTripMode("solo")}
-                >
-                  👤 Solo (100%)
-                </button>
-              </div>
-            </div>
-
-            {/* Paid By & Solo Rider Pickers */}
-            <div style={{ display: "grid", gridTemplateColumns: tripMode === "solo" ? "1fr 1fr" : "1fr", gap: "10px" }}>
-              <div className="sheet-field">
-                <span className="segmented-label">Paid by</span>
-                <select name="paidBy" value={paidBy} onChange={(e) => setPaidBy(e.target.value)}>
-                  {members.map((m) => (
-                    <option key={m.user_id} value={m.user_id}>{m.display_name}</option>
-                  ))}
-                </select>
-              </div>
-              {tripMode === "solo" && (
-                <div className="sheet-field">
-                  <span className="segmented-label">Solo Rider</span>
-                  <select name="soloBy" value={soloBy} onChange={(e) => setSoloBy(e.target.value)}>
-                    {members.map((m) => (
-                      <option key={m.user_id} value={m.user_id}>{m.display_name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            {/* When */}
-            <div className="sheet-field">
-              <span className="segmented-label">When</span>
-              <input name="rideAt" type="datetime-local" required defaultValue={tripDate} />
-            </div>
-
-            {/* Optional Note */}
-            <div className="sheet-field">
-              <span className="segmented-label">Note (optional)</span>
-              <input name="notes" placeholder="e.g. 8:30 AM lecture, heavy traffic" maxLength={280} defaultValue={editingTrip?.notes ?? ""} />
-            </div>
-
-            <button type="submit" className="sheet-submit-btn">
-              {editingTrip ? "Update ride" : "Save ride"}
-            </button>
-          </form>
-        )}
-
-        {/* SET WEEKLY BUDGET */}
-        {modal === "budget" && (
-           <form
-             onSubmit={(e) => {
-               e.preventDefault();
-               const form = new FormData(e.currentTarget);
-               const val = Number(form.get("budget"));
-               if (val > 0) {
-                 onSaveBudget(val);
-                 handleClose();
-               }
-             }}
-             className="sheet-form"
-           >
-             <p style={{ fontSize: "13px", color: "var(--muted)", margin: "0 0 12px", lineHeight: 1.4 }}>
-               Divided strictly across <b>4 college days</b> (never 7) to track your daily transportation allowance accurately.
-             </p>
-             <div className="sheet-field">
-               <span className="segmented-label">Weekly Budget (EGP)</span>
-               <input name="budget" type="number" inputMode="numeric" min="100" step="50" required defaultValue={weeklyBudget} />
-             </div>
-             <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "6px" }}>
-               {[400, 500, 600, 700, 800, 1000].map((preset) => (
-                 <button
-                   key={preset}
-                   type="button"
-                   className="amount-preset-chip"
-                   onClick={(e) => {
-                     const input = e.currentTarget.form?.querySelector<HTMLInputElement>('input[name="budget"]');
-                     if (input) input.value = String(preset);
-                   }}
-                 >
-                   {preset} EGP
-                 </button>
-               ))}
-             </div>
-             <button type="submit" className="sheet-submit-btn">Save weekly budget</button>
-           </form>
-        )}
-
-        {/* SIGN IN */}
-        {modal === "sign-in" && (
-          <div className="sheet-form">
-            <p style={{ fontSize: "13px", color: "var(--muted)", margin: 0, lineHeight: 1.4 }}>
-              Sign in with your approved Google account to open your shared ride workspace with Khaled.
-            </p>
-            {hasPasskey && onSignInPasskey && (
-              <button
-                type="button"
-                className="sheet-submit-btn"
-                style={{
-                  background: "linear-gradient(135deg, #10b981, #059669)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: "8px",
-                }}
-                onClick={() => {
-                  void onSignInPasskey();
-                }}
-              >
-                <span>🔑</span> Sign in with Face ID
-              </button>
-            )}
-            <button
-              type="button"
-              className={hasPasskey ? "hero-action-btn hero-action-secondary" : "sheet-submit-btn"}
-              style={hasPasskey ? { color: "var(--ink)", border: "1px solid var(--line)" } : {}}
-              onClick={() => {
-                handleClose();
-                void onSignIn();
-              }}
-            >
-              Continue with Google
-            </button>
-          </div>
-        )}
-
-        {/* CREATE SPACE */}
-        {modal === "create-space" && (
-          <form
-            className="sheet-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const d = new FormData(e.currentTarget);
-              handleClose();
-              void onCreate(String(d.get("space")), String(d.get("name")));
-            }}
-          >
-            <div className="sheet-field">
-              <span className="segmented-label">Space Name</span>
-              <input name="space" required defaultValue="Omar + Khaled" />
-            </div>
-            <div className="sheet-field">
-              <span className="segmented-label">Your Name</span>
-              <input name="name" required defaultValue={user?.email?.split("@")[0] ?? ""} />
-            </div>
-            <button type="submit" className="sheet-submit-btn">Create shared space</button>
-          </form>
-        )}
-
-        {/* JOIN SPACE */}
-        {modal === "join-space" && (
-          <form
-            className="sheet-form"
-            onSubmit={(e) => {
-              e.preventDefault();
-              const d = new FormData(e.currentTarget);
-              handleClose();
-              void onJoin(String(d.get("code")), String(d.get("name")));
-            }}
-          >
-            <div className="sheet-field">
-              <span className="segmented-label">Invite Code</span>
-              <input name="code" required placeholder="RIDE2026" />
-            </div>
-            <div className="sheet-field">
-              <span className="segmented-label">Your Name</span>
-              <input name="name" required defaultValue={user?.email?.split("@")[0] ?? ""} />
-            </div>
-            <button type="submit" className="sheet-submit-btn">Join space</button>
-          </form>
-        )}
-
-        {/* SHARE / INVITE */}
-        {modal === "share" && group && (
-          <div className="sheet-form">
-            <p style={{ fontSize: "13px", color: "var(--muted)", margin: 0 }}>
-              Send this invite code to your friend to join your shared ledger.
-            </p>
-            <div className="space-code-box">
-              <span className="space-code-text">{group.invite_code}</span>
-              <button
-                type="button"
-                className="copy-code-btn"
-                onClick={() => {
-                  void navigator.clipboard.writeText(group.invite_code);
-                  notify("Invite code copied to clipboard!", "success");
-                }}
-              >
-                Copy
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* IOS SHORTCUT & EMAIL AUTO-DETECT */}
-        {modal === "shortcut" && (
-          <div className="sheet-form" style={{ gap: "12px" }}>
-            {/* Segmented Switcher */}
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px", background: "var(--surface-container)", padding: "4px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-              <button
-                type="button"
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: "8px",
-                  border: "none",
-                  fontWeight: 600,
-                  fontSize: "12px",
-                  cursor: "pointer",
-                  background: shortcutMode === "email" ? "var(--surface)" : "transparent",
-                  color: shortcutMode === "email" ? "var(--foreground)" : "var(--muted)",
-                  boxShadow: shortcutMode === "email" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                }}
-                onClick={() => setShortcutMode("email")}
-              >
-                📧 Auto-Detect Email
-              </button>
-              <button
-                type="button"
-                style={{
-                  padding: "8px 10px",
-                  borderRadius: "8px",
-                  border: "none",
-                  fontWeight: 600,
-                  fontSize: "12px",
-                  cursor: "pointer",
-                  background: shortcutMode === "manual" ? "var(--surface)" : "transparent",
-                  color: shortcutMode === "manual" ? "var(--foreground)" : "var(--muted)",
-                  boxShadow: shortcutMode === "manual" ? "0 1px 3px rgba(0,0,0,0.08)" : "none",
-                }}
-                onClick={() => setShortcutMode("manual")}
-              >
-                ⚡ Siri / 1-Tap
-              </button>
-            </div>
-
-            {shortcutMode === "email" ? (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <div style={{ background: "rgba(16, 185, 129, 0.08)", border: "1px solid rgba(16, 185, 129, 0.25)", borderRadius: "12px", padding: "12px" }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: "6px", fontWeight: 700, fontSize: "13px", color: "#065f46" }}>
-                    <span>✨</span>
-                    <span>100% Automatic Background Logging</span>
-                  </div>
-                  <p style={{ fontSize: "11.5px", color: "#047857", margin: "4px 0 0 0", lineHeight: 1.45 }}>
-                    Whenever Uber or DiDi emails your receipt, n8n detects the incoming email, sends the receipt to Ridewise, and our backend extracts the amount (EGP), date, time, and direction automatically!
-                  </p>
-                </div>
-
-                {/* n8n Automation Box */}
-                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "14px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                      <span style={{ fontSize: "15px" }}>⚡</span>
-                      <span style={{ fontSize: "13px", fontWeight: 700 }}>n8n Cloud / Self-Hosted Workflow</span>
-                    </div>
-                    <span style={{ fontSize: "10px", background: "rgba(239, 68, 68, 0.15)", color: "#ef4444", padding: "2px 6px", borderRadius: "4px", fontWeight: 700 }}>Recommended</span>
-                  </div>
-                  <p style={{ fontSize: "11.5px", color: "var(--muted)", margin: 0, lineHeight: 1.45 }}>
-                    Connects directly to your Gmail, iCloud, or IMAP. When an Uber or DiDi email arrives, n8n forwards it to Ridewise in the background.
-                  </p>
-                  
-                  <button
-                    type="button"
-                    className="sheet-submit-btn"
-                    style={{ background: "linear-gradient(135deg, #ea580c, #c2410c)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", gap: "8px", fontSize: "12px", padding: "10px" }}
-                    onClick={() => {
-                      const origin = typeof window !== "undefined" ? window.location.origin : "https://ridewise.vercel.app";
-                      const n8nJson = {
-                        name: "Ridewise - Uber & DiDi Receipt Auto-Logger",
-                        nodes: [
-                          {
-                            parameters: {
-                              pollTimes: { item: [{ mode: "everyMinute" }] },
-                              filters: { q: "from:(uber.com OR didiglobal.com) (receipt OR trip OR رحلة OR إيصال)" }
-                            },
-                            id: "1",
-                            name: "Gmail - New Uber/DiDi Receipt",
-                            type: "n8n-nodes-base.gmailTrigger",
-                            typeVersion: 1.2,
-                            position: [240, 300]
-                          },
-                          {
-                            parameters: {
-                              method: "POST",
-                              url: `${origin}/api/trips`,
-                              sendBody: true,
-                              specifyBody: "keypair",
-                              bodyParameters: {
-                                parameters: [
-                                  { name: "group_code", value: group?.invite_code || "RIDE2026" },
-                                  { name: "email_body", value: "={{ $json.snippet ? ($json.snippet + '\\n' + ($json.text || '')) : ($json.text || $json.html || '') }}" },
-                                  { name: "subject", value: "={{ $json.subject || '' }}" },
-                                  { name: "email_date", value: "={{ $json.date || '' }}" }
-                                ]
-                              }
-                            },
-                            id: "2",
-                            name: "HTTP - Send to Ridewise",
-                            type: "n8n-nodes-base.httpRequest",
-                            typeVersion: 4.2,
-                            position: [480, 300]
-                          }
-                        ],
-                        connections: {
-                          "Gmail - New Uber/DiDi Receipt": {
-                            main: [[{ node: "HTTP - Send to Ridewise", type: "main", index: 0 }]]
-                          }
-                        },
-                        pinData: {}
-                      };
-                      void navigator.clipboard.writeText(JSON.stringify(n8nJson, null, 2));
-                      notify("Copied n8n workflow! Paste it (Ctrl+V) on your n8n canvas.", "success");
-                    }}
-                  >
-                    <span>📋 Copy Ready-to-Use n8n Workflow JSON</span>
-                  </button>
-
-                  <div style={{ fontSize: "11px", color: "var(--muted)", lineHeight: 1.45, background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
-                    <strong>How to import into n8n:</strong><br />
-                    1. Open any n8n workflow canvas and press <strong>Ctrl+V</strong> (or Cmd+V) to paste.<br />
-                    2. Link your Gmail / Email credential on the trigger node.<br />
-                    3. Turn the workflow <strong>Active</strong>!
-                  </div>
-                </div>
-
-                {/* Step by Step Guide */}
-                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "14px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "10px" }}>
-                  <span style={{ fontSize: "13px", fontWeight: 700 }}>Setup in iOS Shortcuts (1 Minute)</span>
-                  
-                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", lineHeight: 1.4 }}>
-                    <span style={{ background: "var(--surface)", border: "1px solid var(--border)", width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "11px", flexShrink: 0 }}>1</span>
-                    <span>Open <strong>Shortcuts</strong> app › tap <strong>Automation</strong> tab at bottom › tap <strong>+</strong> › select <strong>Email</strong>.</span>
-                  </div>
-
-                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", lineHeight: 1.4 }}>
-                    <span style={{ background: "var(--surface)", border: "1px solid var(--border)", width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "11px", flexShrink: 0 }}>2</span>
-                    <div>
-                      <div>Set <strong>Sender</strong> contains: <code>uber</code> or <code>didi</code></div>
-                      <div>Set <strong>Subject</strong> contains: <code>trip</code> or <code>receipt</code></div>
-                      <div style={{ marginTop: "2px", color: "#059669", fontWeight: 600 }}>Select: "Run Immediately" (Turn off "Notify When Run")</div>
-                    </div>
-                  </div>
-
-                  <div style={{ display: "flex", gap: "8px", fontSize: "12px", lineHeight: 1.4 }}>
-                    <span style={{ background: "var(--surface)", border: "1px solid var(--border)", width: "20px", height: "20px", borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center", fontWeight: 700, fontSize: "11px", flexShrink: 0 }}>3</span>
-                    <div>
-                      <div>Add Action: <strong>Get Contents of URL</strong></div>
-                      <div style={{ fontSize: "11px", color: "var(--muted)", marginTop: "2px" }}>
-                        URL: <code>{typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips"}</code>
-                      </div>
-                      <div style={{ fontSize: "11px", color: "var(--muted)" }}>Method: <strong>POST</strong> · Request Body: <strong>JSON</strong></div>
-                    </div>
-                  </div>
-
-                  {/* 2 Fields Table */}
-                  <div style={{ display: "flex", flexDirection: "column", gap: "6px", marginTop: "4px" }}>
-                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ fontSize: "11px" }}>
-                        <code>group_code</code> (Text) = <strong>{group?.invite_code || "RIDE2026"}</strong>
-                      </div>
-                      <button
-                        type="button"
-                        className="copy-code-btn"
-                        style={{ padding: "3px 6px", fontSize: "10px" }}
-                        onClick={() => {
-                          void navigator.clipboard.writeText(group?.invite_code || "RIDE2026");
-                          notify("Copied invite code!", "info");
-                        }}
-                      >
-                        Copy
-                      </button>
-                    </div>
-
-                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <div style={{ fontSize: "11px" }}>
-                        <code>email_body</code> (Text) = <strong>Shortcut Input</strong>
-                      </div>
-                      <button
-                        type="button"
-                        className="copy-code-btn"
-                        style={{ padding: "3px 6px", fontSize: "10px" }}
-                        onClick={() => {
-                          void navigator.clipboard.writeText("email_body");
-                          notify("Copied key: email_body", "info");
-                        }}
-                      >
-                        Copy Key
-                      </button>
-                    </div>
-                  </div>
-
-                  <a
-                    href="shortcuts://"
-                    className="sheet-submit-btn"
-                    style={{ textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "12px", padding: "10px", marginTop: "4px" }}
-                  >
-                    <span>Open Shortcuts App to Set Up Automation</span>
-                    <span>↗</span>
-                  </a>
-                </div>
-
-                {/* Instant Test Box */}
-                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "12px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <span style={{ fontSize: "12px", fontWeight: 700 }}>🧪 Test Receipt Auto-Detection</span>
-                  <textarea
-                    rows={3}
-                    placeholder="Paste an Uber or DiDi email receipt here to test..."
-                    value={testReceiptText}
-                    onChange={(e) => setTestReceiptText(e.target.value)}
-                    style={{
-                      width: "100%",
-                      padding: "8px",
-                      borderRadius: "8px",
-                      border: "1px solid var(--border)",
-                      background: "var(--surface)",
-                      color: "var(--foreground)",
-                      fontSize: "11px",
-                      fontFamily: "inherit",
-                      resize: "vertical",
-                      boxSizing: "border-box",
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="sheet-submit-btn"
-                    style={{ fontSize: "12px", padding: "8px" }}
-                    disabled={testParsing}
-                    onClick={() => void handleTestParseReceipt()}
-                  >
-                    {testParsing ? "Detecting & Logging..." : "Test & Log Ride Now"}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
-                <a
-                  href="shortcuts://"
-                  className="sheet-submit-btn"
-                  style={{ textDecoration: "none", textAlign: "center", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px", fontSize: "13px", padding: "12px" }}
-                >
-                  <span>Open Apple Shortcuts App</span>
-                  <span>↗</span>
-                </a>
-
-                {/* Webhook Endpoint Box */}
-                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "12px", border: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: "8px" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
-                    <span style={{ color: "var(--muted)", fontWeight: 500 }}>Action:</span>
-                    <span style={{ fontWeight: 600 }}>Get Contents of URL</span>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px" }}>
-                    <span style={{ color: "var(--muted)", fontWeight: 500 }}>Method:</span>
-                    <strong style={{ color: "var(--accent)" }}>POST</strong>
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "12px", background: "var(--surface)", padding: "8px 10px", borderRadius: "8px", border: "1px solid var(--border)" }}>
-                    <span style={{ fontFamily: "monospace", fontSize: "11px", wordBreak: "break-all" }}>
-                      {typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips"}
-                    </span>
-                    <button
-                      type="button"
-                      className="copy-code-btn"
-                      style={{ padding: "3px 8px", fontSize: "10px", marginLeft: "8px" }}
-                      onClick={() => {
-                        const url = typeof window !== "undefined" ? `${window.location.origin}/api/trips` : "https://ridewise.vercel.app/api/trips";
-                        void navigator.clipboard.writeText(url);
-                        notify("Copied API URL!", "info");
-                      }}
-                    >
-                      Copy URL
-                    </button>
-                  </div>
-                </div>
-
-                {/* Apple Shortcuts Fields & Types */}
-                <div style={{ background: "var(--surface-container)", borderRadius: "14px", padding: "14px", border: "1px solid var(--border)" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
-                    <span style={{ fontSize: "13px", fontWeight: 700, color: "var(--foreground)" }}>
-                      Request Body Fields & Types
-                    </span>
-                    <span style={{ fontSize: "10px", color: "var(--accent)", fontWeight: 600 }}>
-                      Tap key to copy
-                    </span>
-                  </div>
-                  <p style={{ fontSize: "11px", color: "var(--muted)", margin: "0 0 10px 0", lineHeight: 1.4 }}>
-                    In "Get contents of URL", set Request Body to <strong>JSON</strong> and add these 4 fields:
-                  </p>
-
-                  <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                    {/* 1. group_code */}
-                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>group_code</code>
-                          <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="copy-code-btn"
-                          style={{ padding: "4px 8px", fontSize: "11px" }}
-                          onClick={() => {
-                            void navigator.clipboard.writeText("group_code");
-                            notify("Copied key: group_code", "info");
-                          }}
-                        >
-                          Copy Key
-                        </button>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: "4px", fontSize: "11px" }}>
-                        <span style={{ color: "var(--muted)" }}>Value: <strong>{group?.invite_code || "RIDE2026"}</strong></span>
-                        <button
-                          type="button"
-                          style={{ background: "none", border: "none", color: "var(--accent)", cursor: "pointer", fontSize: "11px", padding: 0 }}
-                          onClick={() => {
-                            void navigator.clipboard.writeText(group?.invite_code || "RIDE2026");
-                            notify("Copied invite code!", "info");
-                          }}
-                        >
-                          Copy Value
-                        </button>
-                      </div>
-                    </div>
-
-                    {/* 2. amount */}
-                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>amount</code>
-                          <span style={{ fontSize: "10px", background: "rgba(168, 85, 247, 0.15)", color: "#a855f7", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Number</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="copy-code-btn"
-                          style={{ padding: "4px 8px", fontSize: "11px" }}
-                          onClick={() => {
-                            void navigator.clipboard.writeText("amount");
-                            notify("Copied key: amount", "info");
-                          }}
-                        >
-                          Copy Key
-                        </button>
-                      </div>
-                      <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
-                        Value: Select <strong>Shortcut Input</strong> (from "Ask for Number")
-                      </div>
-                    </div>
-
-                    {/* 3. trip_mode */}
-                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>trip_mode</code>
-                          <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="copy-code-btn"
-                          style={{ padding: "4px 8px", fontSize: "11px" }}
-                          onClick={() => {
-                            void navigator.clipboard.writeText("trip_mode");
-                            notify("Copied key: trip_mode", "info");
-                          }}
-                        >
-                          Copy Key
-                        </button>
-                      </div>
-                      <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
-                        Value: Select <strong>Chosen Item</strong> from Menu ("shared" or "solo")
-                      </div>
-                    </div>
-
-                    {/* 4. paid_by */}
-                    <div style={{ background: "var(--surface)", padding: "8px 10px", borderRadius: "10px", border: "1px solid var(--border)" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
-                          <code style={{ fontWeight: 700, fontSize: "12px", color: "var(--foreground)" }}>paid_by</code>
-                          <span style={{ fontSize: "10px", background: "rgba(59, 130, 246, 0.15)", color: "var(--accent)", padding: "2px 6px", borderRadius: "4px", fontWeight: 600 }}>Text</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="copy-code-btn"
-                          style={{ padding: "4px 8px", fontSize: "11px" }}
-                          onClick={() => {
-                            void navigator.clipboard.writeText("paid_by");
-                            notify("Copied key: paid_by", "info");
-                          }}
-                        >
-                          Copy Key
-                        </button>
-                      </div>
-                      <div style={{ marginTop: "4px", fontSize: "11px", color: "var(--muted)" }}>
-                        Value: Select <strong>Chosen Item</strong> from Menu ({members.map((m) => m.display_name).join(" or ") || "Omar or Khaled"})
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
