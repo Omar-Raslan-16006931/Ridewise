@@ -130,6 +130,27 @@ export default function Home() {
 
   const [modal, setModal] = useState<Modal>(null);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
+  const [openTrip, setOpenTrip] = useState<Trip | null>(null);
+  const [scrolled, setScrolled] = useState(false);
+
+  // Compact glass title bar appears once the large title scrolls away.
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 34);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  // Keep the page at its own size: no pinch zoom (iOS ignores user-scalable=no).
+  useEffect(() => {
+    const block = (event: Event) => event.preventDefault();
+    document.addEventListener("gesturestart", block);
+    document.addEventListener("gesturechange", block);
+    return () => {
+      document.removeEventListener("gesturestart", block);
+      document.removeEventListener("gesturechange", block);
+    };
+  }, []);
 
   // Rides Feed Filters
   const [ridesFilter, setRidesFilter] = useState<RidesFilter>("all");
@@ -576,10 +597,10 @@ export default function Home() {
     }
   }
 
-  async function deleteTrip(trip: Trip) {
-    if (!window.confirm("Delete this trip?")) return;
+  async function deleteTrip(trip: Trip, confirmed = false) {
+    if (!confirmed && !window.confirm("Delete this ride?")) return;
     setTrips((existing) => existing.filter((item) => item.id !== trip.id));
-    notify("Trip deleted.", "success");
+    notify("Ride deleted.", "success");
     if (supabase && user) {
       const result = await supabase.from("ride_trips").delete().eq("id", trip.id);
       if (result.error) notify(`Failed to delete trip: ${result.error.message}`, "error");
@@ -781,54 +802,54 @@ export default function Home() {
     return (
       <main className="loading">
         <span className="spinner" aria-hidden="true" />
-        <p>Opening Ridewise</p>
       </main>
     );
   }
 
   const otherName = otherMember?.display_name ?? "your co-rider";
-  const rideActions = {
-    onEdit: (trip: Trip) => {
-      setEditingTrip(trip);
-      setModal("edit");
-    },
-    onDelete: (trip: Trip) => void deleteTrip(trip),
-    onSettle: (trip: Trip, paidByMemberId?: string) => void settleTrip(trip, paidByMemberId),
+  const liveOpenTrip = openTrip ? trips.find((trip) => trip.id === openTrip.id) ?? openTrip : null;
+  const openRide = (trip: Trip) => {
+    setOpenTrip(trip);
+    setModal("ride");
   };
   const showUnsettled = () => {
     setRidesFilter("unsettled");
-    setActiveTab("rides");
+    goTo("rides");
   };
+  function goTo(tab: Tab) {
+    if (tab === activeTab) {
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+    setActiveTab(tab);
+    window.scrollTo(0, 0);
+  }
+  const title = !group ? "" : activeTab === "today" ? "Today" : activeTab === "rides" ? "Rides" : activeTab === "months" ? "Months" : "Space";
+  const subtitle =
+    activeTab === "today"
+      ? new Intl.DateTimeFormat("en", { weekday: "long", day: "numeric", month: "long" }).format(new Date())
+      : null;
 
   return (
     <div className="app">
+      <div className="backdrop" aria-hidden="true" />
+
       {toasts.length > 0 && (
         <div className="toasts" role="region" aria-label="Notifications" aria-live="polite">
           {toasts.map((toast) => (
-            <div key={toast.id} className={`toast toast-${toast.type}`}>
+            <button key={toast.id} type="button" className={`toast toast-${toast.type}`} onClick={() => dismissToast(toast.id)}>
               <Icon name={toast.type === "success" ? "check" : toast.type === "error" ? "x" : "bell"} size={18} />
               <span>{toast.message}</span>
-              <button type="button" className="icon-btn" onClick={() => dismissToast(toast.id)} aria-label="Dismiss">
-                <Icon name="x" size={16} />
-              </button>
-            </div>
+            </button>
           ))}
         </div>
       )}
 
-      <header className="topbar">
-        <button type="button" className="wordmark" onClick={() => setActiveTab("today")}>
-          ridewise
-        </button>
-        <div className="topbar-side">
-          {previewMode && <span className="tag">Preview</span>}
-          {group && (
-            <button type="button" className="link" onClick={() => setActiveTab("space")}>
-              {group.name}
-            </button>
-          )}
-        </div>
-      </header>
+      {group && (
+        <header className={`navbar ${scrolled ? "is-scrolled" : ""}`}>
+          <span>{title}</span>
+        </header>
+      )}
 
       {/* Pull-to-refresh indicator (moved directly by the pull hook, outside React renders) */}
       <div ref={pull.indicatorRef} className={`ptr-indicator ${pull.refreshing ? "refreshing" : ""}`} aria-hidden={!pull.refreshing} role="status">
@@ -841,37 +862,36 @@ export default function Home() {
       <div ref={pull.contentRef} className="ptr-content">
         {!group ? (
           <main className="welcome">
-            <h1>Every ride, split down the middle.</h1>
+            <h1>Ridewise</h1>
             <p>
               {!supabase
-                ? "You are looking at Ridewise with sample rides. Connect Supabase to sync a real ledger."
+                ? "Every ride, split down the middle. Open the preview to look around with sample rides."
                 : user
-                ? "Create a shared space for the two of you, or join one with an invite code."
+                ? "Create a space for the two of you, or join one with an invite code."
                 : "Sign in to open the ledger you share with your co-rider."}
             </p>
-            <div className="welcome-actions">
+            <div className="stack-tight">
               {!supabase ? (
-                <button type="button" className="btn btn-primary btn-wide" onClick={() => setGroup(demoGroup)}>
+                <button type="button" className="btn btn-primary" onClick={() => setGroup(demoGroup)}>
                   Open the preview
                 </button>
               ) : user ? (
                 <>
-                  <button type="button" className="btn btn-primary btn-wide" onClick={() => setModal("create-space")}>
+                  <button type="button" className="btn btn-primary" onClick={() => setModal("create-space")}>
                     Create a space
                   </button>
-                  <button type="button" className="btn btn-quiet btn-wide" onClick={() => setModal("join-space")}>
+                  <button type="button" className="btn btn-glass" onClick={() => setModal("join-space")}>
                     Join with a code
                   </button>
                 </>
               ) : (
                 <>
                   {hasPasskey && (
-                    <button type="button" className="btn btn-primary btn-wide" onClick={() => void signInWithPasskey()}>
-                      <Icon name="key" size={18} />
+                    <button type="button" className="btn btn-primary" onClick={() => void signInWithPasskey()}>
                       Sign in with Face ID
                     </button>
                   )}
-                  <button type="button" className={`btn btn-wide ${hasPasskey ? "btn-quiet" : "btn-primary"}`} onClick={() => setModal("sign-in")}>
+                  <button type="button" className={`btn ${hasPasskey ? "btn-glass" : "btn-primary"}`} onClick={() => setModal("sign-in")}>
                     Sign in with Google
                   </button>
                 </>
@@ -879,110 +899,103 @@ export default function Home() {
             </div>
           </main>
         ) : (
-          <div key={activeTab} className="tab-wrap">
-            {activeTab === "today" && (
-              <TodayTab
-                net={stats.net}
-                unsettledCount={unsettledTrips.length}
-                otherName={otherName}
-                today={todayMetrics}
-                week={week}
-                weekOffset={weekOffset}
-                weekSlide={weekSlide}
-                onChangeWeek={changeWeek}
-                onThisWeek={jumpToCurrentWeek}
-                swipeHandlers={weekSwipeHandlers}
-                latest={recentTrips.slice(0, 4)}
-                totalRides={recentTrips.length}
-                members={members}
-                currentUserId={currentUserId}
-                rideActions={rideActions}
-                onLog={() => requestAction("add")}
-                onSettleUp={showUnsettled}
-                onSeeAll={() => {
-                  setRidesFilter("all");
-                  setActiveTab("rides");
-                }}
-                onEditBudget={() => setModal("budget")}
-              />
-            )}
-            {activeTab === "rides" && (
-              <RidesTab
-                trips={recentTrips}
-                filter={ridesFilter}
-                onFilter={setRidesFilter}
-                members={members}
-                currentUserId={currentUserId}
-                rideActions={rideActions}
-                onLog={() => requestAction("add")}
-              />
-            )}
-            {activeTab === "months" && (
-              <MonthsTab
-                months={months}
-                trips={trips}
-                weeklyBudget={weeklyBudget}
-                members={members}
-                currentUserId={currentUserId}
-                otherName={otherName}
-                otherId={otherMember?.user_id ?? null}
-                rideActions={rideActions}
-                onEditBudget={() => setModal("budget")}
-              />
-            )}
-            {activeTab === "space" && (
-              <SpaceTab
-                group={group}
-                members={members}
-                currentName={currentName}
-                email={user?.email}
-                net={stats.net}
-                otherName={otherName}
-                unsettledCount={unsettledTrips.length}
-                weeklyBudget={weeklyBudget}
-                signedIn={Boolean(user)}
-                cloud={Boolean(supabase)}
-                nativeApp={nativeApp}
-                notificationPermission={notificationPermission}
-                hasPasskey={hasPasskey}
-                ntfyTesting={ntfyTesting}
-                onReviewUnsettled={showUnsettled}
-                onCopyCode={() => {
-                  void navigator.clipboard.writeText(group.invite_code);
-                  notify("Invite code copied.", "success");
-                }}
-                onBudget={() => setModal("budget")}
-                onShortcut={() => setModal("shortcut")}
-                onNotifications={() => void handleNotificationSetup()}
-                onNtfyTest={() => void handleNtfyTest()}
-                onPasskey={() => void (hasPasskey ? verifyPasskey() : registerPasskey())}
-                onRemovePasskey={removePasskey}
-                onSignOut={() => {
-                  void supabase?.auth.signOut();
-                  setGroup(null);
-                  notify("Signed out.", "info");
-                }}
-                onSignIn={() => setModal("sign-in")}
-              />
-            )}
-          </div>
+          <main className="page">
+            <div className="large-title">
+              <h1>{title}</h1>
+              {subtitle && <p>{subtitle}</p>}
+              {previewMode && activeTab === "today" && <p className="tint-text-orange">Sample data</p>}
+            </div>
+            <div key={activeTab} className="tab-in">
+              {activeTab === "today" && (
+                <TodayTab
+                  net={stats.net}
+                  unsettledCount={unsettledTrips.length}
+                  otherName={otherName}
+                  today={todayMetrics}
+                  week={week}
+                  weekOffset={weekOffset}
+                  weekSlide={weekSlide}
+                  onChangeWeek={changeWeek}
+                  onThisWeek={jumpToCurrentWeek}
+                  swipeHandlers={weekSwipeHandlers}
+                  latest={recentTrips.slice(0, 4)}
+                  totalRides={recentTrips.length}
+                  members={members}
+                  currentUserId={currentUserId}
+                  onOpenRide={openRide}
+                  onSettleUp={showUnsettled}
+                  onSeeAll={() => {
+                    setRidesFilter("all");
+                    goTo("rides");
+                  }}
+                  onEditBudget={() => setModal("budget")}
+                />
+              )}
+              {activeTab === "rides" && (
+                <RidesTab trips={recentTrips} filter={ridesFilter} onFilter={setRidesFilter} members={members} currentUserId={currentUserId} onOpenRide={openRide} />
+              )}
+              {activeTab === "months" && (
+                <MonthsTab
+                  months={months}
+                  trips={trips}
+                  weeklyBudget={weeklyBudget}
+                  members={members}
+                  currentUserId={currentUserId}
+                  otherName={otherName}
+                  otherId={otherMember?.user_id ?? null}
+                  onOpenRide={openRide}
+                  onEditBudget={() => setModal("budget")}
+                />
+              )}
+              {activeTab === "space" && (
+                <SpaceTab
+                  group={group}
+                  currentName={currentName}
+                  email={user?.email}
+                  weeklyBudget={weeklyBudget}
+                  signedIn={Boolean(user)}
+                  cloud={Boolean(supabase)}
+                  nativeApp={nativeApp}
+                  notificationPermission={notificationPermission}
+                  hasPasskey={hasPasskey}
+                  ntfyTesting={ntfyTesting}
+                  onCopyCode={() => {
+                    void navigator.clipboard.writeText(group.invite_code);
+                    notify("Invite code copied.", "success");
+                  }}
+                  onBudget={() => setModal("budget")}
+                  onShortcut={() => setModal("shortcut")}
+                  onNotifications={() => void handleNotificationSetup()}
+                  onNtfyTest={() => void handleNtfyTest()}
+                  onPasskey={() => void (hasPasskey ? verifyPasskey() : registerPasskey())}
+                  onRemovePasskey={removePasskey}
+                  onSignOut={() => {
+                    void supabase?.auth.signOut();
+                    setGroup(null);
+                    notify("Signed out.", "info");
+                  }}
+                  onSignIn={() => setModal("sign-in")}
+                />
+              )}
+            </div>
+          </main>
         )}
       </div>
 
       {group && (
-        <nav className="nav" aria-label="Main">
+        <nav className="tabbar" aria-label="Main">
           {TABS.slice(0, 2).map((tab) => (
-            <button key={tab.id} type="button" className={`nav-tab ${activeTab === tab.id ? "is-on" : ""}`} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => setActiveTab(tab.id)}>
+            <button key={tab.id} type="button" className={`tab ${activeTab === tab.id ? "is-on" : ""}`} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => goTo(tab.id)}>
               <Icon name={tab.icon} size={24} />
               <span>{tab.label}</span>
             </button>
           ))}
-          <button type="button" className="nav-tab nav-log" onClick={() => requestAction("add")}>
-            <Icon name="plus" size={28} />
-            <span>Log ride</span>
+          <button type="button" className="tab tab-log" onClick={() => requestAction("add")}>
+            <Icon name="plus" size={26} />
+            <span>Log</span>
           </button>
           {TABS.slice(2).map((tab) => (
-            <button key={tab.id} type="button" className={`nav-tab ${activeTab === tab.id ? "is-on" : ""}`} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => setActiveTab(tab.id)}>
+            <button key={tab.id} type="button" className={`tab ${activeTab === tab.id ? "is-on" : ""}`} aria-current={activeTab === tab.id ? "page" : undefined} onClick={() => goTo(tab.id)}>
               <Icon name={tab.icon} size={24} />
               <span>{tab.label}</span>
             </button>
@@ -992,12 +1005,22 @@ export default function Home() {
 
       {modal && (
         <Sheet
+          key={`${modal}-${editingTrip?.id ?? ""}`}
           kind={modal}
           close={() => {
             setModal(null);
             setEditingTrip(null);
+            setOpenTrip(null);
             setShortcutPreFill(null);
           }}
+          trip={liveOpenTrip}
+          currentUserId={currentUserId}
+          onSettleTrip={(trip, paidBy) => void settleTrip(trip, paidBy)}
+          onEditTrip={(trip) => {
+            setEditingTrip(trip);
+            setModal("edit");
+          }}
+          onDeleteTrip={(trip) => void deleteTrip(trip, true)}
           members={members}
           group={group}
           user={user}

@@ -1,14 +1,19 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import type { Member, RideGroup, Trip } from "../../lib/types";
 import { egp } from "./format";
 import { Icon } from "./icons";
+import { Money } from "./numbers";
+import { rideStatus } from "./rides";
+import { Segmented } from "./Segmented";
+import { formatDay, formatTime } from "./format";
 
-export type SheetKind = "add" | "edit" | "sign-in" | "create-space" | "join-space" | "share" | "budget" | "shortcut";
+export type SheetKind = "ride" | "add" | "edit" | "sign-in" | "create-space" | "join-space" | "share" | "budget" | "shortcut";
 type Notify = (message: string, type?: "success" | "error" | "info") => void;
 
 const TITLES: Record<SheetKind, string> = {
+  ride: "Ride",
   add: "Log ride",
   edit: "Edit ride",
   budget: "Weekly budget",
@@ -43,21 +48,20 @@ function Choice<T extends string>({
     <div className="field">
       <span className="field-label">{label}</span>
       <input type="hidden" name={name} value={value} />
-      <div className="segmented" role="radiogroup" aria-label={label}>
-        {options.map((option) => (
-          <button
-            key={option.value}
-            type="button"
-            role="radio"
-            aria-checked={value === option.value}
-            className={value === option.value ? "is-on" : ""}
-            onClick={() => onChange(option.value)}
-          >
-            {option.icon && <Icon name={option.icon} size={18} />}
-            {option.label}
-          </button>
-        ))}
-      </div>
+      <Segmented
+        label={label}
+        value={value}
+        onChange={onChange}
+        options={options.map((option) => ({
+          value: option.value,
+          label: (
+            <>
+              {option.icon && <Icon name={option.icon} size={17} />}
+              {option.label}
+            </>
+          ),
+        }))}
+      />
     </div>
   );
 }
@@ -99,7 +103,17 @@ export function Sheet({
   hasPasskey,
   onSignInPasskey,
   onRefreshWorkspace,
+  trip,
+  currentUserId,
+  onSettleTrip,
+  onEditTrip,
+  onDeleteTrip,
 }: {
+  trip?: Trip | null;
+  currentUserId?: string;
+  onSettleTrip?: (trip: Trip, paidByMemberId?: string) => void;
+  onEditTrip?: (trip: Trip) => void;
+  onDeleteTrip?: (trip: Trip) => void;
   kind: SheetKind;
   close: () => void;
   members: Member[];
@@ -135,6 +149,37 @@ export function Sheet({
   const [autoMode, setAutoMode] = useState<"email" | "manual">("email");
   const [receiptText, setReceiptText] = useState("");
   const [parsing, setParsing] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const sheetRef = useRef<HTMLDivElement | null>(null);
+  const drag = useRef<{ y: number; dy: number } | null>(null);
+
+  // Drag the grabber or title down to close, like an iOS sheet.
+  const dragHandlers = {
+    onTouchStart: (e: React.TouchEvent) => {
+      drag.current = { y: e.touches[0].clientY, dy: 0 };
+      if (sheetRef.current) sheetRef.current.style.transition = "none";
+    },
+    onTouchMove: (e: React.TouchEvent) => {
+      if (!drag.current) return;
+      const dy = Math.max(0, e.touches[0].clientY - drag.current.y);
+      drag.current.dy = dy;
+      if (sheetRef.current) sheetRef.current.style.transform = `translateY(${dy}px)`;
+    },
+    onTouchEnd: () => {
+      const dy = drag.current?.dy ?? 0;
+      drag.current = null;
+      const el = sheetRef.current;
+      if (!el) return;
+      el.style.transition = "transform 0.35s cubic-bezier(0.32, 0.72, 0, 1)";
+      if (dy > 110) {
+        el.style.transform = "translateY(110%)";
+        setClosing(true);
+        setTimeout(close, 260);
+      } else {
+        el.style.transform = "";
+      }
+    },
+  };
 
   const origin = typeof window !== "undefined" ? window.location.origin : "https://ubershareride.vercel.app";
   const apiUrl = `${origin}/api/trips`;
@@ -247,14 +292,96 @@ export function Sheet({
 
   return (
     <div className={`sheet-backdrop ${closing ? "is-closing" : ""}`} onClick={handleClose}>
-      <div className={`sheet ${closing ? "is-closing" : ""}`} role="dialog" aria-modal="true" aria-label={TITLES[kind]} onClick={(e) => e.stopPropagation()}>
-        <div className="sheet-grip" aria-hidden="true" />
-        <header className="sheet-head">
-          <h2>{TITLES[kind]}</h2>
-          <button type="button" className="icon-btn" onClick={handleClose} aria-label="Close">
-            <Icon name="x" />
-          </button>
-        </header>
+      <div
+        ref={sheetRef}
+        className={`sheet ${closing ? "is-closing" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-label={TITLES[kind]}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="sheet-drag" {...dragHandlers}>
+          <div className="sheet-grip" aria-hidden="true" />
+          <header className="sheet-head">
+            <h2>{kind === "ride" && trip ? (trip.direction === "campus" ? "To campus" : "Back home") : TITLES[kind]}</h2>
+            <button type="button" className="icon-btn" onClick={handleClose} aria-label="Close">
+              <Icon name="x" size={20} />
+            </button>
+          </header>
+        </div>
+
+        {kind === "ride" && trip && (() => {
+          const solo = trip.trip_mode === "solo";
+          const iPaid = trip.paid_by === currentUserId;
+          const payer = members.find((m) => m.user_id === trip.paid_by)?.display_name ?? "Someone";
+          const debtor = members.find((m) => m.user_id !== trip.paid_by);
+          const myShare = solo ? (trip.solo_by === currentUserId ? trip.amount : 0) : trip.amount / 2;
+          const status = rideStatus(trip, members, currentUserId ?? "");
+          return (
+            <div className="form">
+              <div className="ride-hero">
+                <Money value={trip.amount} className="num-hero" />
+                <span className="secondary">
+                  {formatDay(trip.ride_at)}, {formatTime(trip.ride_at)}
+                </span>
+              </div>
+              <div className="glass list list-inset">
+                <div className="row row-static">
+                  <span className="row-title">Ride</span>
+                  <span className="row-value-soft">{solo ? "Solo" : "Shared 50/50"}</span>
+                </div>
+                <div className="row row-static">
+                  <span className="row-title">{solo ? "Rider" : "Paid Uber"}</span>
+                  <span className="row-value-soft">{solo ? members.find((m) => m.user_id === trip.solo_by)?.display_name : payer}</span>
+                </div>
+                <div className="row row-static">
+                  <span className="row-title">Your share</span>
+                  <span className="row-value-soft">EGP {egp(myShare)}</span>
+                </div>
+                {!solo && (
+                  <div className="row row-static">
+                    <span className="row-title">Status</span>
+                    <span className={`row-value-soft status-${status.tone || "plain"}`}>{status.text}</span>
+                  </div>
+                )}
+                {trip.notes && (
+                  <div className="row row-static">
+                    <span className="row-title">Note</span>
+                    <span className="row-value-soft">{trip.notes}</span>
+                  </div>
+                )}
+              </div>
+              {!solo && !trip.settled_at && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => {
+                    onSettleTrip?.(trip, iPaid ? debtor?.user_id : currentUserId);
+                    handleClose();
+                  }}
+                >
+                  {iPaid ? `${debtor?.display_name ?? "They"} paid me back` : "I paid my half"}
+                </button>
+              )}
+              <div className="btn-row">
+                <button type="button" className="btn btn-glass" onClick={() => onEditTrip?.(trip)}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-glass is-danger"
+                  onClick={() => {
+                    if (!confirmDelete) return setConfirmDelete(true);
+                    onDeleteTrip?.(trip);
+                    handleClose();
+                  }}
+                >
+                  {confirmDelete ? "Tap again to delete" : "Delete"}
+                </button>
+              </div>
+            </div>
+          );
+        })()}
 
         {(kind === "add" || kind === "edit") && (
           <form onSubmit={submitRide} className="form">
@@ -329,7 +456,7 @@ export function Sheet({
               <input name="notes" placeholder="Morning lecture, heavy traffic" maxLength={280} defaultValue={editingTrip?.notes ?? ""} />
             </label>
 
-            <button type="submit" className="btn btn-primary btn-wide">
+            <button type="submit" className="btn btn-primary">
               {editingTrip ? "Save changes" : "Save ride"}
             </button>
           </form>
@@ -364,7 +491,7 @@ export function Sheet({
                 ? `EGP ${egp(Number(budgetDraft) / 4)} per college day, EGP ${egp(Number(budgetDraft) * 4)} a month.`
                 : "Enter an amount."}
             </p>
-            <button type="submit" className="btn btn-primary btn-wide">
+            <button type="submit" className="btn btn-primary">
               Save budget
             </button>
           </form>
@@ -374,14 +501,14 @@ export function Sheet({
           <div className="form">
             <p className="note">Sign in with your approved Google account to open the shared ledger.</p>
             {hasPasskey && onSignInPasskey && (
-              <button type="button" className="btn btn-primary btn-wide" onClick={() => void onSignInPasskey()}>
+              <button type="button" className="btn btn-primary" onClick={() => void onSignInPasskey()}>
                 <Icon name="key" size={18} />
                 Sign in with Face ID
               </button>
             )}
             <button
               type="button"
-              className={`btn btn-wide ${hasPasskey ? "btn-quiet" : "btn-primary"}`}
+              className={`btn ${hasPasskey ? "btn-glass" : "btn-primary"}`}
               onClick={() => {
                 handleClose();
                 void onSignIn();
@@ -410,7 +537,7 @@ export function Sheet({
               <span className="field-label">Your name</span>
               <input name="name" required defaultValue={user?.email?.split("@")[0] ?? ""} />
             </label>
-            <button type="submit" className="btn btn-primary btn-wide">
+            <button type="submit" className="btn btn-primary">
               Create space
             </button>
           </form>
@@ -434,7 +561,7 @@ export function Sheet({
               <span className="field-label">Your name</span>
               <input name="name" required defaultValue={user?.email?.split("@")[0] ?? ""} />
             </label>
-            <button type="submit" className="btn btn-primary btn-wide">
+            <button type="submit" className="btn btn-primary">
               Join space
             </button>
           </form>
@@ -447,7 +574,7 @@ export function Sheet({
               <span className="code">{group.invite_code}</span>
               <button
                 type="button"
-                className="btn btn-quiet btn-small"
+                className="pill"
                 onClick={() => {
                   void navigator.clipboard.writeText(group.invite_code);
                   notify("Invite code copied.", "success");
@@ -462,14 +589,15 @@ export function Sheet({
 
         {kind === "shortcut" && (
           <div className="form">
-            <div className="segmented" role="tablist" aria-label="Setup method">
-              <button type="button" role="tab" aria-selected={autoMode === "email"} className={autoMode === "email" ? "is-on" : ""} onClick={() => setAutoMode("email")}>
-                From receipts
-              </button>
-              <button type="button" role="tab" aria-selected={autoMode === "manual"} className={autoMode === "manual" ? "is-on" : ""} onClick={() => setAutoMode("manual")}>
-                Siri or one tap
-              </button>
-            </div>
+            <Segmented
+              label="Setup method"
+              value={autoMode}
+              onChange={setAutoMode}
+              options={[
+                { value: "email", label: "From receipts" },
+                { value: "manual", label: "Siri or one tap" },
+              ]}
+            />
 
             {autoMode === "email" ? (
               <>
@@ -480,7 +608,7 @@ export function Sheet({
                 <section className="guide">
                   <h3>With n8n, recommended</h3>
                   <p className="note">Watches your Gmail, iCloud or IMAP inbox and forwards each receipt in the background.</p>
-                  <button type="button" className="btn btn-primary btn-wide" onClick={copyN8nWorkflow}>
+                  <button type="button" className="btn btn-primary" onClick={copyN8nWorkflow}>
                     <Icon name="copy" size={18} />
                     Copy the n8n workflow
                   </button>
@@ -508,7 +636,7 @@ export function Sheet({
                     <span className="kv-key">email_body</span>
                     <span className="kv-value">Shortcut Input</span>
                   </div>
-                  <a href="shortcuts://" className="btn btn-quiet btn-wide">
+                  <a href="shortcuts://" className="btn btn-glass">
                     Open Shortcuts
                     <Icon name="external" size={16} />
                   </a>
@@ -517,7 +645,7 @@ export function Sheet({
                 <section className="guide">
                   <h3>Try it with a receipt</h3>
                   <textarea rows={3} placeholder="Paste an Uber or DiDi email receipt" value={receiptText} onChange={(e) => setReceiptText(e.target.value)} />
-                  <button type="button" className="btn btn-primary btn-wide" disabled={parsing} onClick={() => void testReceipt()}>
+                  <button type="button" className="btn btn-primary" disabled={parsing} onClick={() => void testReceipt()}>
                     {parsing ? "Reading receipt" : "Read receipt and log the ride"}
                   </button>
                 </section>
@@ -551,7 +679,7 @@ export function Sheet({
                     <span className="kv-value">Text, {members.map((m) => m.display_name).join(" or ") || "Omar or Khaled"}</span>
                   </div>
                 </section>
-                <a href="shortcuts://" className="btn btn-primary btn-wide">
+                <a href="shortcuts://" className="btn btn-primary">
                   Open Shortcuts
                   <Icon name="external" size={16} />
                 </a>

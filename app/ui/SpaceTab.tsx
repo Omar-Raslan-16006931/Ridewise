@@ -1,50 +1,27 @@
 "use client";
 
 import type { ReactNode } from "react";
-import type { Member, RideGroup } from "../../lib/types";
-import { egp, plural } from "./format";
+import type { RideGroup } from "../../lib/types";
+import { egp } from "./format";
 import { Icon } from "./icons";
 
-function Row({
-  icon,
-  title,
-  sub,
-  onClick,
-  danger,
-  disabled,
-  badge,
-}: {
-  icon: string;
-  title: string;
-  sub: ReactNode;
-  onClick: () => void;
-  danger?: boolean;
-  disabled?: boolean;
-  badge?: string;
-}) {
+function Row({ icon, title, sub, onClick, danger, disabled, end }: { icon: string; title: string; sub?: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; end?: ReactNode }) {
   return (
-    <button type="button" className={`setting ${danger ? "is-danger" : ""}`} onClick={onClick} disabled={disabled}>
-      <Icon name={icon} size={22} />
-      <span className="setting-text">
-        <span className="setting-title">
-          {title}
-          {badge && <em>{badge}</em>}
-        </span>
-        <span className="setting-sub">{sub}</span>
+    <button type="button" className={`row ${danger ? "is-danger" : ""}`} onClick={onClick} disabled={disabled}>
+      <Icon name={icon} size={22} className="row-icon" />
+      <span className="row-text">
+        <span className="row-title">{title}</span>
+        {sub && <span className="row-sub">{sub}</span>}
       </span>
-      <Icon name="right" size={18} className="setting-chevron" />
+      {end ?? <Icon name="right" size={18} className="row-chevron" />}
     </button>
   );
 }
 
 export function SpaceTab({
   group,
-  members,
   currentName,
   email,
-  net,
-  otherName,
-  unsettledCount,
   weeklyBudget,
   signedIn,
   cloud,
@@ -52,7 +29,6 @@ export function SpaceTab({
   notificationPermission,
   hasPasskey,
   ntfyTesting,
-  onReviewUnsettled,
   onCopyCode,
   onBudget,
   onShortcut,
@@ -64,12 +40,8 @@ export function SpaceTab({
   onSignIn,
 }: {
   group: RideGroup;
-  members: Member[];
   currentName: string;
   email?: string;
-  net: number;
-  otherName: string;
-  unsettledCount: number;
   weeklyBudget: number;
   signedIn: boolean;
   cloud: boolean;
@@ -77,7 +49,6 @@ export function SpaceTab({
   notificationPermission: string;
   hasPasskey: boolean;
   ntfyTesting: boolean;
-  onReviewUnsettled: () => void;
   onCopyCode: () => void;
   onBudget: () => void;
   onShortcut: () => void;
@@ -89,97 +60,53 @@ export function SpaceTab({
   onSignIn: () => void;
 }) {
   return (
-    <main className="tab">
-      <h1 className="page-title">{group.name}</h1>
-      <p className="page-sub">
-        {members.length > 0 ? members.map((member) => member.display_name).join(" and ") : currentName}, splitting every shared ride 50/50.
-      </p>
-
-      <section className="card">
-        <header className="card-head">
-          <h2>Balance</h2>
-        </header>
-        <p className="lead">
-          {net === 0
-            ? "All square."
-            : net > 0
-            ? `${otherName} owes you EGP ${egp(net)}.`
-            : `You owe ${otherName} EGP ${egp(Math.abs(net))}.`}
-          <span>
-            {unsettledCount === 0 ? " Nothing waiting to be paid back." : ` ${plural(unsettledCount, "shared ride")} still unsettled.`}
-          </span>
-        </p>
-        {unsettledCount > 0 && (
-          <button type="button" className="btn btn-primary" onClick={onReviewUnsettled}>
-            Review unsettled rides
-          </button>
-        )}
-      </section>
-
-      <section className="card">
-        <header className="card-head">
-          <h2>Invite code</h2>
-        </header>
-        <div className="code-row">
-          <span className="code">{group.invite_code}</span>
-          <button type="button" className="btn btn-quiet btn-small" onClick={onCopyCode}>
-            <Icon name="copy" size={16} />
-            Copy
-          </button>
+    <div className="stack">
+      <section className="stack-tight">
+        <div className="section-head">
+          <h2>Shared space</h2>
         </div>
-        <p className="note">Your co-rider joins the space with this code. Automations use it too.</p>
+        <div className="glass list">
+          <Row icon="users" title={group.name} sub={`Invite code ${group.invite_code}`} onClick={onCopyCode} end={<span className="link">Copy</span>} />
+          <Row icon="wallet" title="Weekly budget" sub={`${egp(weeklyBudget)} a week, ${egp(weeklyBudget / 4)} a college day`} onClick={onBudget} />
+        </div>
       </section>
 
-      <section className="settings">
-        <Row
-          icon="wallet"
-          title="Weekly budget"
-          sub={`EGP ${egp(weeklyBudget)} a week, EGP ${egp(weeklyBudget / 4)} per college day`}
-          onClick={onBudget}
-        />
-        <Row icon="bolt" title="Log rides automatically" sub="Uber and DiDi receipts, Siri and Shortcuts" onClick={onShortcut} />
-        {nativeApp && (
-          <Row
-            icon="bell"
-            title="Ride notifications"
-            badge={notificationPermission === "granted" ? "On" : undefined}
-            sub={
-              notificationPermission === "granted"
-                ? "Alerts when a ride is auto-logged. Tap to send a test."
-                : notificationPermission === "denied"
-                ? "Turned off in iPhone Settings"
-                : "Tap to allow alerts for auto-logged rides"
-            }
-            onClick={onNotifications}
-          />
-        )}
-        {cloud && signedIn && (
-          <Row
-            icon="send"
-            title={ntfyTesting ? "Sending test" : "Test ntfy alert"}
-            sub="Sends a test push to the ntfy app"
-            onClick={onNtfyTest}
-            disabled={ntfyTesting}
-          />
-        )}
-        {cloud && signedIn && !nativeApp && (
-          <Row
-            icon="key"
-            title="Face ID sign-in"
-            badge={hasPasskey ? "On" : undefined}
-            sub={hasPasskey ? "Active on this device. Tap to check it works." : "Sign in with Face ID or fingerprint"}
-            onClick={onPasskey}
-          />
-        )}
-        {cloud && signedIn && !nativeApp && hasPasskey && (
-          <Row icon="x" title="Remove Face ID" sub="Forget the passkey saved on this device" onClick={onRemovePasskey} />
-        )}
-        {cloud && signedIn ? (
-          <Row icon="logout" title="Sign out" sub={email ?? currentName} onClick={onSignOut} danger />
-        ) : cloud ? (
-          <Row icon="user" title="Sign in with Google" sub="Open your shared ledger" onClick={onSignIn} />
-        ) : null}
+      <section className="stack-tight">
+        <div className="section-head">
+          <h2>Automation</h2>
+        </div>
+        <div className="glass list">
+          <Row icon="bolt" title="Log rides automatically" sub="From Uber and DiDi receipts, or Siri" onClick={onShortcut} />
+          {nativeApp && (
+            <Row
+              icon="bell"
+              title="Ride notifications"
+              sub={notificationPermission === "granted" ? "On. Tap to send a test." : notificationPermission === "denied" ? "Off in iPhone Settings" : "Tap to allow"}
+              onClick={onNotifications}
+            />
+          )}
+          {cloud && signedIn && <Row icon="send" title={ntfyTesting ? "Sending" : "Test ntfy alert"} onClick={onNtfyTest} disabled={ntfyTesting} />}
+        </div>
       </section>
-    </main>
+
+      {cloud && (
+        <section className="stack-tight">
+          <div className="section-head">
+            <h2>Account</h2>
+          </div>
+          <div className="glass list">
+            {signedIn && !nativeApp && (
+              <Row icon="key" title="Face ID sign-in" sub={hasPasskey ? "On for this device" : "Off"} onClick={onPasskey} />
+            )}
+            {signedIn && !nativeApp && hasPasskey && <Row icon="x" title="Remove Face ID" onClick={onRemovePasskey} />}
+            {signedIn ? (
+              <Row icon="logout" title="Sign out" sub={email ?? currentName} onClick={onSignOut} danger end={<span />} />
+            ) : (
+              <Row icon="user" title="Sign in with Google" onClick={onSignIn} />
+            )}
+          </div>
+        </section>
+      )}
+    </div>
   );
 }
