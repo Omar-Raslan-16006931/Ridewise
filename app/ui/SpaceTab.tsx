@@ -5,10 +5,9 @@ import type { RideGroup } from "../../lib/types";
 import { egp } from "./format";
 import { Icon } from "./icons";
 
-function Row({ icon, title, sub, onClick, danger, disabled, end }: { icon: string; title: string; sub?: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; end?: ReactNode }) {
+function Row({ title, sub, onClick, danger, disabled, end }: { icon?: string; title: string; sub?: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; end?: ReactNode }) {
   return (
     <button type="button" className={`row ${danger ? "is-danger" : ""}`} onClick={onClick} disabled={disabled}>
-      <Icon name={icon} size={22} className="row-icon" />
       <span className="row-text">
         <span className="row-title">{title}</span>
         {sub && <span className="row-sub">{sub}</span>}

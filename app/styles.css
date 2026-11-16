@@ -35,28 +35,7 @@
   --font-num: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, "Inter", system-ui, sans-serif;
   --spring: cubic-bezier(0.32, 0.72, 0, 1);
   --ease: cubic-bezier(0.25, 1, 0.5, 1);
-  color-scheme: light dark;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #000;
-    --label: #fff;
-    --label-2: rgba(235, 235, 245, 0.62);
-    --label-3: rgba(235, 235, 245, 0.32);
-    --sep: rgba(84, 84, 88, 0.55);
-    --fill: rgba(120, 120, 128, 0.24);
-    --fill-2: rgba(120, 120, 128, 0.34);
-    --glass: rgba(38, 38, 42, 0.55);
-    --glass-strong: rgba(30, 30, 34, 0.82);
-    --sheet: #1c1c1e;
-    --glass-edge: rgba(255, 255, 255, 0.12);
-    --glass-shade: 0 1px 1px rgba(0, 0, 0, 0.2), 0 12px 36px rgba(0, 0, 0, 0.4);
-    --blue: #0a84ff;
-    --orange: #ff9f0a;
-    --green: #30d158;
-    --red: #ff453a;
-  }
+  color-scheme: light;
 }
 
 /* ---------- Page stays put: no sideways drift, no rubber band, no zoom ---------- */
@@ -116,23 +95,12 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(70% 45% at 0% 0%, rgba(0, 122, 255, 0.22), transparent 70%),
-    radial-gradient(60% 40% at 100% 22%, rgba(255, 149, 0, 0.18), transparent 70%),
-    radial-gradient(70% 45% at 20% 100%, rgba(52, 199, 89, 0.14), transparent 70%),
-    radial-gradient(50% 35% at 100% 85%, rgba(175, 82, 222, 0.12), transparent 70%),
+    radial-gradient(70% 45% at 0% 0%, rgba(0, 122, 255, 0.14), transparent 70%),
+    radial-gradient(60% 40% at 100% 22%, rgba(255, 149, 0, 0.1), transparent 70%),
+    radial-gradient(70% 45% at 20% 100%, rgba(52, 199, 89, 0.08), transparent 70%),
+    radial-gradient(50% 35% at 100% 85%, rgba(175, 82, 222, 0.07), transparent 70%),
     var(--bg);
 }
-@media (prefers-color-scheme: dark) {
-  .backdrop {
-    background:
-      radial-gradient(70% 45% at 0% 0%, rgba(10, 132, 255, 0.28), transparent 70%),
-      radial-gradient(60% 40% at 100% 22%, rgba(255, 159, 10, 0.16), transparent 70%),
-      radial-gradient(70% 45% at 20% 100%, rgba(48, 209, 88, 0.12), transparent 70%),
-      radial-gradient(50% 35% at 100% 85%, rgba(191, 90, 242, 0.16), transparent 70%),
-      var(--bg);
-  }
-}
-
 /* ---------- Glass ---------- */
 .glass {
   position: relative;
@@ -350,7 +318,7 @@ button.row:active { background: var(--fill); }
 .row-value-soft { color: var(--label-2); text-align: right; min-width: 0; overflow-wrap: anywhere; }
 .row-static { justify-content: space-between; }
 .row-chevron { color: var(--label-3); }
-.row-icon { color: var(--label-2); }
+.row-icon { color: var(--label-3); }
 .row.is-danger .row-title,
 .row.is-danger .row-icon { color: var(--red); }
 .row-more { justify-content: center; color: var(--blue); font-weight: 500; min-height: 50px; }
@@ -380,9 +348,6 @@ button.row:active { background: var(--fill); }
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.12), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
   transition: transform 0.4s var(--spring);
   z-index: -1;
-}
-@media (prefers-color-scheme: dark) {
-  .segmented-thumb { background: rgba(99, 99, 102, 0.85); }
 }
 .segmented button {
   min-width: 0;
@@ -760,3 +725,5 @@ html.native-ios body { background: var(--bg); }
     transition-duration: 0.01ms !important;
   }
 }
+.row-icon.tint-text-campus { color: var(--blue); }
+.row-icon.tint-text-home { color: var(--orange); }

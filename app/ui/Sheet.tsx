@@ -421,8 +421,8 @@ export function Sheet({
               value={direction}
               onChange={setDirection}
               options={[
-                { value: "campus", label: "To campus", icon: "campus" },
-                { value: "home", label: "Back home", icon: "home" },
+                { value: "campus", label: "To campus", },
+                { value: "home", label: "Back home", },
               ]}
             />
             <Choice
@@ -431,8 +431,8 @@ export function Sheet({
               value={tripMode}
               onChange={setTripMode}
               options={[
-                { value: "shared", label: "Shared 50/50", icon: "users" },
-                { value: "solo", label: "Solo", icon: "user" },
+                { value: "shared", label: "Shared 50/50", },
+                { value: "solo", label: "Solo", },
               ]}
             />
             {tripMode === "shared" ? (
@@ -502,7 +502,6 @@ export function Sheet({
             <p className="note">Sign in with your approved Google account to open the shared ledger.</p>
             {hasPasskey && onSignInPasskey && (
               <button type="button" className="btn btn-primary" onClick={() => void onSignInPasskey()}>
-                <Icon name="key" size={18} />
                 Sign in with Face ID
               </button>
             )}
@@ -580,7 +579,6 @@ export function Sheet({
                   notify("Invite code copied.", "success");
                 }}
               >
-                <Icon name="copy" size={16} />
                 Copy
               </button>
             </div>
@@ -609,7 +607,6 @@ export function Sheet({
                   <h3>With n8n, recommended</h3>
                   <p className="note">Watches your Gmail, iCloud or IMAP inbox and forwards each receipt in the background.</p>
                   <button type="button" className="btn btn-primary" onClick={copyN8nWorkflow}>
-                    <Icon name="copy" size={18} />
                     Copy the n8n workflow
                   </button>
                   <ol className="steps">
