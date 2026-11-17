@@ -22,7 +22,7 @@ import { Segmented } from "./Segmented";
 
 function Rows({ rows }: { rows: { label: string; sub?: string; value: string }[] }) {
   return (
-    <div className="glass list">
+    <div className="panel list">
       {rows.map((row) => (
         <div key={row.label} className="row row-static">
           <span className="row-text">
@@ -36,13 +36,18 @@ function Rows({ rows }: { rows: { label: string; sub?: string; value: string }[]
   );
 }
 
-function Tile({ label, value, format }: { label: string; value: number; format?: (n: number) => string }) {
+/** Four figures in one panel, split by hairlines. */
+function Quad({ items }: { items: { label: string; value: number; format?: (n: number) => string }[] }) {
   return (
-    <div className="glass tile">
-      <span className="secondary small">{label}</span>
-      <span className="tile-value">
-        <Count value={value} format={format} />
-      </span>
+    <div className="panel quad">
+      {items.map((item) => (
+        <div key={item.label} className="quad-cell">
+          <span className="label">{item.label}</span>
+          <span className="quad-value">
+            <Count value={item.value} format={item.format} />
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -166,145 +171,142 @@ export function MonthsTab({
 
       {view === "month" ? (
         <>
-          <section className="glass card card-flush">
-            <MonthStrip months={months} selectedKey={month.key} onSelect={select} />
-          </section>
-
           <div key={month.key} className={`stack ${slide ? `slide-${slide}` : ""}`} {...swipe}>
-            <section className="glass card">
-              <div className="card-head">
-                <h2>{month.label}</h2>
+            <section className="hero">
+              <div className="hero-row">
+                <p className="hero-label">{month.label}</p>
                 <div className="stepper">
                   <button type="button" className="icon-btn" onClick={() => step(-1)} disabled={index === 0} aria-label="Previous month">
-                    <Icon name="left" size={22} />
+                    <Icon name="left" size={20} />
                   </button>
                   <button type="button" className="icon-btn" onClick={() => step(1)} disabled={index === months.length - 1} aria-label="Next month">
-                    <Icon name="right" size={22} />
+                    <Icon name="right" size={20} />
                   </button>
                 </div>
               </div>
-              <div className="kpi">
-                <Money value={month.mySpend} roll className="num-hero" />
-                <span className="secondary">{month.isCurrent ? "so far" : "spent"}</span>
-              </div>
+              <Money value={month.mySpend} roll className="num-hero" />
               <p className={`trend ${trendTone}`}>
                 {trendIcon && <Icon name={trendIcon} size={16} />}
                 {trendText}
               </p>
-              {limit > 0 && (
-                <>
-                  <div className="divider" />
-                  <Meter
-                    value={month.mySpend}
-                    max={limit}
-                    marker={month.isCurrent && month.mySpend > 0 ? projection.projected : null}
-                    tone={overLimit ? "red" : paceOver ? "orange" : "blue"}
-                  />
-                  <div className="card-foot">
-                    <span className="secondary small">
-                      {month.isCurrent && month.mySpend > 0
-                        ? `On pace for ${egp(projection.projected)} of ${egp(limit)}`
-                        : `${Math.round((month.mySpend / limit) * 100)}% of ${egp(limit)} budget`}
-                    </span>
-                    <button type="button" className="link" onClick={onEditBudget}>
-                      Budget
-                    </button>
-                  </div>
-                </>
-              )}
             </section>
-
-            {month.myRides === 0 ? (
-              <p className="glass card secondary center">No rides in {monthName}.</p>
-            ) : (
-              <>
-                <div className="tiles">
-                  <Tile label="Rides" value={month.myRides} format={whole} />
-                  <Tile label="Days ridden" value={month.activeDays} format={whole} />
-                  <Tile label="Per ride" value={month.avgPerRide} />
-                  <Tile label="Saved by sharing" value={month.sharingSaved} />
-                </div>
-
-                <section className="glass card">
-                  <div className="card-head">
-                    <h2>Each day</h2>
-                  </div>
-                  <DayBars days={month.days} selectedIso={pickedDay?.isoDate ?? null} onSelect={setPickedDay} />
-                  <p className="secondary small center" aria-live="polite">
-                    {pickedDay
-                      ? `${formatDay(new Date(month.year, month.month, pickedDay.day))}, ${pickedDay.rides > 0 ? `EGP ${egp(pickedDay.amount)} on ${plural(pickedDay.rides, "ride")}` : "no rides"}`
-                      : "Tap a bar to see that day"}
-                  </p>
-                </section>
-
-                <section className="stack-tight">
-                  <div className="section-head">
-                    <h2>Breakdown</h2>
-                  </div>
-                  <Rows
-                    rows={[
-                      { label: "To campus", sub: plural(month.campusRides, "ride"), value: egp(month.campusSpend) },
-                      { label: "Back home", sub: plural(month.homeRides, "ride"), value: egp(month.homeSpend) },
-                      { label: "Your half of shared", sub: plural(month.sharedRides, "ride"), value: egp(month.mySharedSpend) },
-                      { label: "Your solo rides", sub: plural(month.soloRides, "ride"), value: egp(month.mySoloSpend) },
-                      { label: "You paid Uber", sub: "full fares, up front", value: egp(month.paidByMe) },
-                      { label: `${otherName} paid Uber`, sub: "full fares, up front", value: egp(month.paidByOthers) },
-                    ]}
-                  />
-                </section>
-
-                <section className="stack-tight">
-                  <div className="section-head">
-                    <h2>Rides</h2>
-                    <span className="secondary small">{month.trips.length}</span>
-                  </div>
-                  <RideList
-                    trips={visibleRides}
-                    members={members}
-                    currentUserId={currentUserId}
-                    onOpen={onOpenRide}
-                    footer={
-                      month.trips.length > 5 ? (
-                        <button type="button" className="row row-more" onClick={() => setShowAll(!showAll)}>
-                          {showAll ? "Show fewer" : `Show all ${month.trips.length}`}
-                        </button>
-                      ) : null
-                    }
-                  />
-                </section>
-              </>
-            )}
           </div>
+
+          <section className="panel strip-panel">
+            <MonthStrip months={months} selectedKey={month.key} onSelect={select} />
+            {limit > 0 && (
+              <div className="strip-foot">
+                <Meter
+                  value={month.mySpend}
+                  max={limit}
+                  marker={month.isCurrent && month.mySpend > 0 ? projection.projected : null}
+                  tone={overLimit ? "bad" : paceOver ? "warn" : "accent"}
+                />
+                <div className="panel-foot">
+                  <span className="label">
+                    {month.isCurrent && month.mySpend > 0
+                      ? `On pace for ${egp(projection.projected)} of ${egp(limit)}`
+                      : `${Math.round((month.mySpend / limit) * 100)}% of the ${egp(limit)} budget`}
+                  </span>
+                  <button type="button" className="text-btn" onClick={onEditBudget}>
+                    Budget
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          {month.myRides === 0 ? (
+            <p className="panel pad label center">No rides in {monthName}.</p>
+          ) : (
+            <>
+              <Quad
+                items={[
+                  { label: "Rides", value: month.myRides, format: whole },
+                  { label: "Days ridden", value: month.activeDays, format: whole },
+                  { label: "Per ride", value: month.avgPerRide },
+                  { label: "Saved by sharing", value: month.sharingSaved },
+                ]}
+              />
+
+              <section className="panel pad">
+                <div className="panel-head">
+                  <h2>Each day</h2>
+                </div>
+                <DayBars days={month.days} selectedIso={pickedDay?.isoDate ?? null} onSelect={setPickedDay} />
+                <p className="label center" aria-live="polite">
+                  {pickedDay
+                    ? `${formatDay(new Date(month.year, month.month, pickedDay.day))}: ${pickedDay.rides > 0 ? `${egp(pickedDay.amount)} on ${plural(pickedDay.rides, "ride")}` : "no rides"}`
+                    : "Tap a bar to see that day"}
+                </p>
+              </section>
+
+              <section className="stack-tight">
+                <div className="section-head">
+                  <h2>Breakdown</h2>
+                </div>
+                <Rows
+                  rows={[
+                    { label: "To campus", sub: plural(month.campusRides, "ride"), value: egp(month.campusSpend) },
+                    { label: "Back home", sub: plural(month.homeRides, "ride"), value: egp(month.homeSpend) },
+                    { label: "Your half of shared", sub: plural(month.sharedRides, "ride"), value: egp(month.mySharedSpend) },
+                    { label: "Your solo rides", sub: plural(month.soloRides, "ride"), value: egp(month.mySoloSpend) },
+                    { label: "You paid Uber", sub: "full fares, up front", value: egp(month.paidByMe) },
+                    { label: `${otherName} paid Uber`, sub: "full fares, up front", value: egp(month.paidByOthers) },
+                  ]}
+                />
+              </section>
+
+              <section className="stack-tight">
+                <div className="section-head">
+                  <h2>Rides</h2>
+                  <span className="label">{month.trips.length}</span>
+                </div>
+                <RideList
+                  trips={visibleRides}
+                  members={members}
+                  currentUserId={currentUserId}
+                  onOpen={onOpenRide}
+                  footer={
+                    month.trips.length > 5 ? (
+                      <button type="button" className="row row-more" onClick={() => setShowAll(!showAll)}>
+                        {showAll ? "Show fewer" : `Show all ${month.trips.length}`}
+                      </button>
+                    ) : null
+                  }
+                />
+              </section>
+            </>
+          )}
         </>
       ) : (
         <div className="stack">
-          <section className="glass card">
-            <p className="card-label">Since {allTime.since ?? "the start"}</p>
+          <section className="hero">
+            <p className="hero-label">Since {allTime.since ?? "the start"}</p>
             <Money value={allTime.mySpend} roll className="num-hero" />
-            <p className="secondary">
+            <p className="trend">
               {plural(allTime.myRides, "ride")} over {plural(allTime.monthsWithRides, "month")}
             </p>
           </section>
 
-          <div className="tiles">
-            <Tile label="Average month" value={allTime.avgMonth} />
-            <Tile label="Saved by sharing" value={allTime.saved} />
-            {allTime.highest && <Tile label={`Highest, ${allTime.highest.shortLabel}`} value={allTime.highest.mySpend} />}
-            {allTime.lowest && <Tile label={`Lowest, ${allTime.lowest.shortLabel}`} value={allTime.lowest.mySpend} />}
-          </div>
+          <Quad
+            items={[
+              { label: "Average month", value: allTime.avgMonth },
+              { label: "Saved by sharing", value: allTime.saved },
+              ...(allTime.highest ? [{ label: `Highest, ${allTime.highest.shortLabel}`, value: allTime.highest.mySpend }] : []),
+              ...(allTime.lowest ? [{ label: `Lowest, ${allTime.lowest.shortLabel}`, value: allTime.lowest.mySpend }] : []),
+            ]}
+          />
 
-          <section className="glass card">
-            <div className="card-head">
+          <section className="panel pad">
+            <div className="panel-head">
               <h2>Bus pass</h2>
-              <span className="secondary">{egp(BUS_BENCHMARK)}</span>
+              <span className="label">{egp(BUS_BENCHMARK)}</span>
             </div>
-            <div className="kpi">
-              <Money value={Math.abs(BUS_BENCHMARK - allTime.groupSpend)} className="num-large" />
-              <span className="secondary">{allTime.groupSpend > BUS_BENCHMARK ? "over" : "under"}</span>
-            </div>
-            <Meter value={allTime.groupSpend} max={BUS_BENCHMARK} tone={allTime.groupSpend > BUS_BENCHMARK ? "red" : "green"} />
-            <p className="secondary small">
-              Together you have spent {egp(allTime.groupSpend)}, {((allTime.groupSpend / BUS_BENCHMARK) * 100).toFixed(0)}% of the university bus pass.
+            <Meter value={allTime.groupSpend} max={BUS_BENCHMARK} tone={allTime.groupSpend > BUS_BENCHMARK ? "bad" : "good"} />
+            <p className="label">
+              Together you have spent {egp(allTime.groupSpend)}, {((allTime.groupSpend / BUS_BENCHMARK) * 100).toFixed(0)}% of the pass.{" "}
+              {allTime.groupSpend > BUS_BENCHMARK ? `${egp(allTime.groupSpend - BUS_BENCHMARK)} over.` : `${egp(BUS_BENCHMARK - allTime.groupSpend)} still under.`}
             </p>
           </section>
 

@@ -880,7 +880,7 @@ export default function Home() {
                   <button type="button" className="btn btn-primary" onClick={() => setModal("create-space")}>
                     Create a space
                   </button>
-                  <button type="button" className="btn btn-glass" onClick={() => setModal("join-space")}>
+                  <button type="button" className="btn btn-quiet" onClick={() => setModal("join-space")}>
                     Join with a code
                   </button>
                 </>
@@ -891,7 +891,7 @@ export default function Home() {
                       Sign in with Face ID
                     </button>
                   )}
-                  <button type="button" className={`btn ${hasPasskey ? "btn-glass" : "btn-primary"}`} onClick={() => setModal("sign-in")}>
+                  <button type="button" className={`btn ${hasPasskey ? "btn-quiet" : "btn-primary"}`} onClick={() => setModal("sign-in")}>
                     Sign in with Google
                   </button>
                 </>
@@ -903,7 +903,7 @@ export default function Home() {
             <div className="large-title">
               <h1>{title}</h1>
               {subtitle && <p>{subtitle}</p>}
-              {previewMode && activeTab === "today" && <p className="tint-text-orange">Sample data</p>}
+              {previewMode && activeTab === "today" && <p className="label">Sample data</p>}
             </div>
             <div key={activeTab} className="tab-in">
               {activeTab === "today" && (

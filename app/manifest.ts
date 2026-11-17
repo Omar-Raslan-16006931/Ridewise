@@ -7,8 +7,8 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "A shared Uber ledger for two friends.",
     start_url: "/",
     display: "standalone",
-    background_color: "#f2f2f7",
-    theme_color: "#f2f2f7",
+    background_color: "#12161a",
+    theme_color: "#12161a",
     orientation: "portrait",
     icons: [],
   };

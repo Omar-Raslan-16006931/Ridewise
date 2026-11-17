@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { monthKeyOf, personalTotal } from "../../lib/analytics";
+import { monthKeyOf, personalTotal, toLocalDateKey } from "../../lib/analytics";
 import type { Member, Trip } from "../../lib/types";
 import { egp } from "./format";
 import { RideList } from "./rides";
@@ -24,24 +24,35 @@ export function RidesTab({
   currentUserId: string;
   onOpenRide: (trip: Trip) => void;
 }) {
-  const groups = useMemo(() => {
+  const months = useMemo(() => {
     const visible = trips.filter((trip) => {
       if (filter === "unsettled") return trip.trip_mode === "shared" && !trip.settled_at;
       if (filter === "shared") return trip.trip_mode === "shared";
       if (filter === "solo") return trip.trip_mode === "solo";
       return true;
     });
-    const byMonth = new Map<string, Trip[]>();
+    const byMonth = new Map<string, Map<string, Trip[]>>();
     for (const trip of visible) {
-      const key = monthKeyOf(trip.ride_at);
-      byMonth.set(key, [...(byMonth.get(key) ?? []), trip]);
+      const m = monthKeyOf(trip.ride_at);
+      const d = toLocalDateKey(trip.ride_at);
+      if (!byMonth.has(m)) byMonth.set(m, new Map());
+      const days = byMonth.get(m)!;
+      days.set(d, [...(days.get(d) ?? []), trip]);
     }
-    return [...byMonth.entries()].map(([key, list]) => ({
-      key,
-      label: new Date(list[0].ride_at).toLocaleDateString("en", { month: "long", year: "numeric" }),
-      trips: list,
-      share: personalTotal(list, currentUserId),
-    }));
+    return [...byMonth.entries()].map(([key, days]) => {
+      const all = [...days.values()].flat();
+      return {
+        key,
+        label: new Date(all[0].ride_at).toLocaleDateString("en", { month: "long", year: "numeric" }),
+        share: personalTotal(all, currentUserId),
+        days: [...days.entries()].map(([dayKey, list]) => ({
+          key: dayKey,
+          label: new Date(list[0].ride_at).toLocaleDateString("en", { weekday: "short", day: "numeric", month: "short" }),
+          share: personalTotal(list, currentUserId),
+          trips: list,
+        })),
+      };
+    });
   }, [trips, filter, currentUserId]);
 
   return (
@@ -57,18 +68,26 @@ export function RidesTab({
           { value: "solo", label: "Solo" },
         ]}
       />
-      {groups.length === 0 ? (
-        <p className="glass card secondary center">
+      {months.length === 0 ? (
+        <p className="panel pad label center">
           {filter === "unsettled" ? "Nothing to settle. Every shared ride is paid back." : "No rides here yet."}
         </p>
       ) : (
-        groups.map((group) => (
-          <section key={group.key} className="stack-tight">
-            <div className="section-head">
-              <h2>{group.label}</h2>
-              <span className="secondary small">Your share {egp(group.share)}</span>
+        months.map((month) => (
+          <section key={month.key} className="stack-tight">
+            <div className="month-title">
+              <h2>{month.label}</h2>
+              <span className="label">Your share {egp(month.share)}</span>
             </div>
-            <RideList trips={group.trips} members={members} currentUserId={currentUserId} onOpen={onOpenRide} />
+            {month.days.map((day) => (
+              <div key={day.key} className="day-group">
+                <div className="day-head">
+                  <span>{day.label}</span>
+                  <span>{egp(day.share)}</span>
+                </div>
+                <RideList trips={day.trips} members={members} currentUserId={currentUserId} onOpen={onOpenRide} timeOnly />
+              </div>
+            ))}
           </section>
         ))
       )}

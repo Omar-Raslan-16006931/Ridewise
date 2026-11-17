@@ -15,39 +15,43 @@ export function rideStatus(trip: Trip, members: Member[], currentUserId: string)
   return { text: `You owe ${egp(half)}`, tone: "due" };
 }
 
+export function RideRow({ trip, members, currentUserId, onOpen, timeOnly }: { trip: Trip; members: Member[]; currentUserId: string; onOpen: (trip: Trip) => void; timeOnly?: boolean }) {
+  const status = rideStatus(trip, members, currentUserId);
+  return (
+    <button type="button" className="row" onClick={() => onOpen(trip)}>
+      <Icon name={trip.direction === "campus" ? "campus" : "home"} size={20} className={`row-icon dir-${trip.direction}`} />
+      <span className="row-text">
+        <span className="row-title">{trip.direction === "campus" ? "To campus" : "Back home"}</span>
+        <span className="row-sub">{timeOnly ? formatTime(trip.ride_at) : `${formatShortDate(trip.ride_at)}, ${formatTime(trip.ride_at)}`}</span>
+      </span>
+      <span className="row-end">
+        <span className="row-value">{egp(trip.amount)}</span>
+        <span className={`row-sub status-${status.tone || "plain"}`}>{status.text}</span>
+      </span>
+    </button>
+  );
+}
+
 export function RideList({
   trips,
   members,
   currentUserId,
   onOpen,
   footer,
+  timeOnly,
 }: {
   trips: Trip[];
   members: Member[];
   currentUserId: string;
   onOpen: (trip: Trip) => void;
   footer?: React.ReactNode;
+  timeOnly?: boolean;
 }) {
   return (
-    <div className="glass list">
-      {trips.map((trip) => {
-        const status = rideStatus(trip, members, currentUserId);
-        return (
-          <button key={trip.id} type="button" className="row" onClick={() => onOpen(trip)}>
-            <Icon name={trip.direction === "campus" ? "campus" : "home"} size={22} className={`row-icon tint-text-${trip.direction}`} />
-            <span className="row-text">
-              <span className="row-title">{trip.direction === "campus" ? "To campus" : "Back home"}</span>
-              <span className="row-sub">
-                {formatShortDate(trip.ride_at)}, {formatTime(trip.ride_at)}
-              </span>
-            </span>
-            <span className="row-end">
-              <span className="row-value">{egp(trip.amount)}</span>
-              <span className={`row-sub status-${status.tone || "plain"}`}>{status.text}</span>
-            </span>
-          </button>
-        );
-      })}
+    <div className="panel list">
+      {trips.map((trip) => (
+        <RideRow key={trip.id} trip={trip} members={members} currentUserId={currentUserId} onOpen={onOpen} timeOnly={timeOnly} />
+      ))}
       {footer}
     </div>
   );

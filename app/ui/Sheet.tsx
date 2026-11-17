@@ -73,7 +73,7 @@ function CopyRow({ label, value, notify }: { label: string; value: string; notif
       <code className="kv-value">{value}</code>
       <button
         type="button"
-        className="link"
+        className="text-btn"
         onClick={() => {
           void navigator.clipboard.writeText(value);
           notify(`Copied ${value}`, "info");
@@ -325,7 +325,7 @@ export function Sheet({
                   {formatDay(trip.ride_at)}, {formatTime(trip.ride_at)}
                 </span>
               </div>
-              <div className="glass list list-inset">
+              <div className="list list-inset">
                 <div className="row row-static">
                   <span className="row-title">Ride</span>
                   <span className="row-value-soft">{solo ? "Solo" : "Shared 50/50"}</span>
@@ -364,12 +364,12 @@ export function Sheet({
                 </button>
               )}
               <div className="btn-row">
-                <button type="button" className="btn btn-glass" onClick={() => onEditTrip?.(trip)}>
+                <button type="button" className="btn btn-quiet" onClick={() => onEditTrip?.(trip)}>
                   Edit
                 </button>
                 <button
                   type="button"
-                  className="btn btn-glass is-danger"
+                  className="btn btn-quiet is-danger"
                   onClick={() => {
                     if (!confirmDelete) return setConfirmDelete(true);
                     onDeleteTrip?.(trip);
@@ -507,7 +507,7 @@ export function Sheet({
             )}
             <button
               type="button"
-              className={`btn ${hasPasskey ? "btn-glass" : "btn-primary"}`}
+              className={`btn ${hasPasskey ? "btn-quiet" : "btn-primary"}`}
               onClick={() => {
                 handleClose();
                 void onSignIn();
@@ -633,7 +633,7 @@ export function Sheet({
                     <span className="kv-key">email_body</span>
                     <span className="kv-value">Shortcut Input</span>
                   </div>
-                  <a href="shortcuts://" className="btn btn-glass">
+                  <a href="shortcuts://" className="btn btn-quiet">
                     Open Shortcuts
                     <Icon name="external" size={16} />
                   </a>

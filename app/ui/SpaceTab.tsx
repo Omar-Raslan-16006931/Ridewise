@@ -64,8 +64,8 @@ export function SpaceTab({
         <div className="section-head">
           <h2>Shared space</h2>
         </div>
-        <div className="glass list">
-          <Row icon="users" title={group.name} sub={`Invite code ${group.invite_code}`} onClick={onCopyCode} end={<span className="link">Copy</span>} />
+        <div className="panel list">
+          <Row icon="users" title={group.name} sub={`Invite code ${group.invite_code}`} onClick={onCopyCode} end={<span className="text-btn">Copy</span>} />
           <Row icon="wallet" title="Weekly budget" sub={`${egp(weeklyBudget)} a week, ${egp(weeklyBudget / 4)} a college day`} onClick={onBudget} />
         </div>
       </section>
@@ -74,7 +74,7 @@ export function SpaceTab({
         <div className="section-head">
           <h2>Automation</h2>
         </div>
-        <div className="glass list">
+        <div className="panel list">
           <Row icon="bolt" title="Log rides automatically" sub="From Uber and DiDi receipts, or Siri" onClick={onShortcut} />
           {nativeApp && (
             <Row
@@ -93,7 +93,7 @@ export function SpaceTab({
           <div className="section-head">
             <h2>Account</h2>
           </div>
-          <div className="glass list">
+          <div className="panel list">
             {signedIn && !nativeApp && (
               <Row icon="key" title="Face ID sign-in" sub={hasPasskey ? "On for this device" : "Off"} onClick={onPasskey} />
             )}

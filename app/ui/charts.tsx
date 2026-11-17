@@ -132,12 +132,12 @@ export function MonthStrip({
 }
 
 /** A thin progress track with an optional dashed marker. */
-export function Meter({ value, max, marker, tone = "blue" }: { value: number; max: number; marker?: number | null; tone?: "blue" | "green" | "orange" | "red" }) {
+export function Meter({ value, max, marker, tone = "accent" }: { value: number; max: number; marker?: number | null; tone?: "accent" | "good" | "warn" | "bad" }) {
   const pct = max > 0 ? Math.min(100, Math.max(0, (value / max) * 100)) : 0;
   const markerPct = marker != null && max > 0 ? Math.min(100, Math.max(0, (marker / max) * 100)) : null;
   return (
     <div className="meter" role="img" aria-label={`${Math.round(pct)}% used`}>
-      <span className={`meter-fill tint-${tone}`} style={{ width: `${pct}%` }} />
+      <span className={`meter-fill meter-${tone}`} style={{ width: `${pct}%` }} />
       {markerPct != null && <span className="meter-marker" style={{ left: `${markerPct}%` }} />}
     </div>
   );
