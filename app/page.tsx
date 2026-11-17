@@ -827,7 +827,7 @@ export default function Home() {
   const title = !group ? "" : activeTab === "today" ? "Today" : activeTab === "rides" ? "Rides" : activeTab === "months" ? "Months" : "Space";
   const subtitle =
     activeTab === "today"
-      ? new Intl.DateTimeFormat("en", { weekday: "long", day: "numeric", month: "long" }).format(new Date())
+      ? `${new Intl.DateTimeFormat("en", { weekday: "long", day: "numeric", month: "long" }).format(new Date())}${previewMode ? ", sample data" : ""}`
       : null;
 
   return (
@@ -903,7 +903,6 @@ export default function Home() {
             <div className="large-title">
               <h1>{title}</h1>
               {subtitle && <p>{subtitle}</p>}
-              {previewMode && activeTab === "today" && <p className="label">Sample data</p>}
             </div>
             <div key={activeTab} className="tab-in">
               {activeTab === "today" && (

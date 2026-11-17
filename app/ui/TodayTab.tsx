@@ -70,7 +70,7 @@ export function TodayTab({
     <div className="stack">
       <section className="hero">
         <p className="hero-label">{net === 0 ? "You are all square" : net > 0 ? `${otherName} owes you` : `You owe ${otherName}`}</p>
-        <Money value={Math.abs(net)} roll className="num-hero" />
+        <Money value={Math.abs(net)} roll className={`num-hero ${net > 0 ? "c-accent" : net < 0 ? "c-warn" : ""}`} />
         {unsettledCount > 0 && (
           <button type="button" className="text-btn" onClick={onSettleUp}>
             {plural(unsettledCount, "ride")} to settle
@@ -84,7 +84,7 @@ export function TodayTab({
           <span className="label">Today</span>
           {today.isCollegeDay ? (
             <>
-              <span className={`duo-value ${todayOver ? "is-bad" : ""}`}>
+              <span className={`duo-value ${todayOver ? "is-bad" : "c-accent"}`}>
                 <Count value={Math.abs(today.todayRemaining)} />
               </span>
               <span className="label">{todayOver ? "over allowance" : `left of ${egp(today.todayBudget)}`}</span>
@@ -98,7 +98,7 @@ export function TodayTab({
         </div>
         <div className="duo-cell">
           <span className="label">This week</span>
-          <span className={`duo-value ${week.remaining < 0 && weekOffset === 0 ? "is-bad" : ""}`}>
+          <span className={`duo-value ${week.remaining < 0 ? "is-bad" : "c-campus"}`}>
             <Count value={Math.abs(weekOffset === 0 ? week.remaining : week.remaining)} />
           </span>
           <span className="label">{week.remaining < 0 ? "over budget" : `left of ${egp(week.budget)}`}</span>
@@ -107,10 +107,10 @@ export function TodayTab({
 
       <section className="panel pad" {...swipeHandlers}>
         <div className="panel-head">
-          <div>
-            <h2>{week.name}</h2>
-            <p className="label">{week.label}</p>
-          </div>
+          <h2>
+            {week.name}
+            <span className="inline-meta">{week.label}</span>
+          </h2>
           <div className="stepper">
             <button type="button" className="icon-btn" onClick={() => onChangeWeek(-1)} aria-label="Previous week">
               <Icon name="left" size={20} />

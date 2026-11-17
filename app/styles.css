@@ -1,29 +1,29 @@
-/* Ridewise, one calm theme.
-   Deep slate, soft off-white text, muted sage for actions.
-   Muted blue means "to campus", muted sand means "back home". Icons are bare, never on tiles. */
+/* Ridewise, one theme: deep forest green with lime, the original Ridewise colours made calmer.
+   Sky blue means "to campus", warm amber means "back home". Icons are bare, never on tiles. */
 
 :root {
-  --bg: #12161a;
-  --text: #ebe8e2;
-  --text-2: rgba(235, 232, 226, 0.56);
-  --text-3: rgba(235, 232, 226, 0.3);
-  --line: rgba(255, 255, 255, 0.07);
-  --fill: rgba(255, 255, 255, 0.06);
-  --fill-2: rgba(255, 255, 255, 0.11);
+  --bg: #0e1a14;
+  --text: #eef2e4;
+  --text-2: rgba(238, 242, 228, 0.6);
+  --text-3: rgba(238, 242, 228, 0.32);
+  --line: rgba(217, 255, 112, 0.08);
+  --fill: rgba(217, 255, 112, 0.07);
+  --fill-2: rgba(238, 242, 228, 0.12);
 
-  --panel: rgba(255, 255, 255, 0.045);
-  --panel-edge: rgba(255, 255, 255, 0.07);
-  --sheet: #1a1f24;
-  --bar: rgba(26, 31, 36, 0.8);
+  --panel: rgba(36, 66, 52, 0.42);
+  --panel-edge: rgba(217, 255, 112, 0.08);
+  --sheet: #17291f;
+  --bar: rgba(22, 40, 30, 0.82);
   --blur: blur(22px) saturate(140%);
 
-  --accent: #a9c7b8;
-  --accent-ink: #13201a;
-  --campus: #93b4d4;
-  --home: #d6a982;
-  --good: #a9c7b8;
-  --warn: #d8b878;
-  --bad: #d9918a;
+  --accent: #d9ff70;
+  --accent-ink: #14200f;
+  --campus: #7cc4e8;
+  --home: #f2b36b;
+  --good: #b8e986;
+  --warn: #f2c14e;
+  --bad: #ff8f7e;
+  --violet: #b9a6ff;
 
   --gutter: 20px;
   --gap: 24px;
@@ -89,8 +89,8 @@ code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0
   z-index: -1;
   pointer-events: none;
   background:
-    radial-gradient(90% 50% at 50% -8%, rgba(132, 162, 170, 0.2), transparent 70%),
-    radial-gradient(60% 40% at 100% 100%, rgba(169, 199, 184, 0.06), transparent 70%),
+    radial-gradient(90% 50% at 50% -8%, rgba(60, 120, 80, 0.45), transparent 70%),
+    radial-gradient(60% 40% at 100% 100%, rgba(217, 255, 112, 0.06), transparent 70%),
     var(--bg);
 }
 
@@ -197,6 +197,8 @@ b { font-weight: 600; }
 .hero-label { font-size: 15px; color: var(--text-2); }
 .hero .text-btn { margin-top: 4px; }
 .trend { display: flex; align-items: center; gap: 6px; font-size: 15px; color: var(--text-2); }
+.trend.tint-text-green { color: var(--good); }
+.trend.tint-text-red { color: var(--bad); }
 
 /* ---------- Panels ---------- */
 .panel {
@@ -268,7 +270,7 @@ button.row:active { background: var(--fill); }
 .row.is-danger .row-title { color: var(--bad); }
 .row-more { justify-content: center; color: var(--accent); font-size: 15px; font-weight: 500; min-height: 48px; }
 .status-due { color: var(--warn); }
-.status-done { color: var(--text-3); }
+.status-done { color: var(--good); opacity: 0.75; }
 
 .month-title { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 4px 2px 0; }
 .month-title h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
@@ -295,7 +297,7 @@ button.row:active { background: var(--fill); }
   width: calc((100% - 6px) / var(--n));
   transform: translateX(calc(100% * var(--k)));
   border-radius: 9px;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(217, 255, 112, 0.16);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   transition: transform 0.4s var(--spring);
   z-index: -1;
@@ -312,7 +314,7 @@ button.row:active { background: var(--fill); }
   white-space: nowrap;
   transition: color 0.2s ease;
 }
-.segmented button.is-on { color: var(--text); }
+.segmented button.is-on { color: var(--accent); }
 
 /* ---------- Meter ---------- */
 .meter { position: relative; height: 6px; border-radius: 3px; background: var(--fill); }
@@ -342,14 +344,14 @@ button.row:active { background: var(--fill); }
   transition: height 0.5s var(--spring), opacity 0.2s ease;
 }
 .chart-bar.is-empty { background: var(--fill-2); opacity: 1; }
-.chart-bar.is-over { background: var(--warn); }
+.chart-bar.is-over { background: var(--home); }
 @keyframes grow { from { transform: scaleY(0); } }
 .chart-plot:has(.is-selected) .chart-col:not(.is-selected) .chart-bar { opacity: 0.25; }
 .chart-col.is-selected .chart-value { color: var(--text); }
 .chart-mark { position: absolute; left: 0; right: 0; bottom: calc((100% - 19px) * var(--mark, 0)); border-top: 1px dashed var(--text-3); pointer-events: none; }
 .chart-axis { display: flex; gap: 10px; margin-top: 8px; }
 .chart-axis span { flex: 1; min-width: 0; text-align: center; font-size: 12px; color: var(--text-3); font-weight: 500; }
-.chart-axis span.is-today { color: var(--text); }
+.chart-axis span.is-today { color: var(--accent); }
 
 .chart-month .chart-plot,
 .chart-month .chart-axis { gap: 3px; }
@@ -415,8 +417,8 @@ button.row:active { background: var(--fill); }
 }
 .tab .icon { transition: transform 0.35s var(--spring); }
 .tab:active .icon { transform: scale(0.86); }
-.tab.is-on { color: var(--text); }
-.tab-log { color: var(--accent); }
+.tab.is-on { color: var(--accent); }
+.tab-log { color: var(--text); }
 
 /* ---------- Buttons ---------- */
 .btn {
@@ -447,13 +449,13 @@ button.row:active { background: var(--fill); }
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(5, 8, 10, 0.55);
+  background: rgba(4, 10, 6, 0.6);
   animation: dimIn 0.3s ease both;
   touch-action: none;
 }
 .sheet-backdrop.is-closing { animation: dimOut 0.26s ease both; }
-@keyframes dimIn { from { background: rgba(5, 8, 10, 0); } }
-@keyframes dimOut { to { background: rgba(5, 8, 10, 0); } }
+@keyframes dimIn { from { background: rgba(4, 10, 6, 0); } }
+@keyframes dimOut { to { background: rgba(4, 10, 6, 0); } }
 .sheet {
   width: calc(100% - 16px);
   max-width: calc(var(--max) - 16px);
@@ -627,3 +629,28 @@ html.native-ios body { background: var(--bg); }
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---------- Colour roles ---------- */
+.c-accent { color: var(--accent); }
+.c-good { color: var(--good); }
+.c-warn { color: var(--warn); }
+.c-bad { color: var(--bad); }
+.c-campus { color: var(--campus); }
+.c-home { color: var(--home); }
+.c-violet { color: var(--violet); }
+.money.c-accent .money-code,
+.money.c-warn .money-code { color: inherit; opacity: 0.55; }
+.dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot.bg-campus { background: var(--campus); }
+.dot.bg-home { background: var(--home); }
+.dot.bg-accent { background: var(--accent); }
+.dot.bg-violet { background: var(--violet); }
+.dot.bg-warn { background: var(--warn); }
+.dot.bg-text { background: var(--text-2); }
+
+/* One-line rows: label left, detail right. */
+.line-row { min-height: 50px; }
+.line-row .row-title { display: flex; align-items: center; gap: 10px; }
+.row-meta { color: var(--text-3); font-size: 14px; font-weight: 400; }
+.row-detail { color: var(--text-2); font-size: 15px; white-space: nowrap; }
+.inline-meta { color: var(--text-3); font-size: 14px; font-weight: 400; margin-left: 8px; }

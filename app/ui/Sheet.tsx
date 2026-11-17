@@ -320,7 +320,7 @@ export function Sheet({
           return (
             <div className="form">
               <div className="ride-hero">
-                <Money value={trip.amount} className="num-hero" />
+                <Money value={trip.amount} className="num-hero c-accent" />
                 <span className="secondary">
                   {formatDay(trip.ride_at)}, {formatTime(trip.ride_at)}
                 </span>
@@ -404,7 +404,7 @@ export function Sheet({
                 />
               </label>
               <p className="amount-hint" aria-live="polite">
-                {fare > 0 ? (tripMode === "shared" ? `EGP ${egp(fare / 2)} each` : "Full fare, not split") : "Enter the fare Uber charged"}
+                {fare > 0 ? (tripMode === "shared" ? `${egp(fare / 2)} each` : "Full fare") : "Fare from Uber"}
               </p>
               <div className="chips chips-center">
                 {FARE_PRESETS.map((preset) => (
@@ -474,7 +474,7 @@ export function Sheet({
               }
             }}
           >
-            <p className="note">Your own allowance for a week of rides. It is spread over the 4 college days, and four weeks make the monthly budget.</p>
+            <p className="note">Your share for a week, spread over 4 college days.</p>
             <label className="field">
               <span className="field-label">EGP per week</span>
               <input name="budget" type="number" inputMode="numeric" min="100" step="50" required value={budgetDraft} onChange={(e) => setBudgetDraft(e.target.value)} />
@@ -487,9 +487,7 @@ export function Sheet({
               ))}
             </div>
             <p className="note">
-              {Number(budgetDraft) > 0
-                ? `EGP ${egp(Number(budgetDraft) / 4)} per college day, EGP ${egp(Number(budgetDraft) * 4)} a month.`
-                : "Enter an amount."}
+              {Number(budgetDraft) > 0 ? `${egp(Number(budgetDraft) / 4)} a day, ${egp(Number(budgetDraft) * 4)} a month` : "Enter an amount"}
             </p>
             <button type="submit" className="btn btn-primary">
               Save budget
@@ -499,7 +497,7 @@ export function Sheet({
 
         {kind === "sign-in" && (
           <div className="form">
-            <p className="note">Sign in with your approved Google account to open the shared ledger.</p>
+            <p className="note">Use your approved Google account.</p>
             {hasPasskey && onSignInPasskey && (
               <button type="button" className="btn btn-primary" onClick={() => void onSignInPasskey()}>
                 Sign in with Face ID
@@ -568,7 +566,7 @@ export function Sheet({
 
         {kind === "share" && group && (
           <div className="form">
-            <p className="note">Send this code to your co-rider. They enter it under Join with code.</p>
+            <p className="note">Send this code to your co-rider.</p>
             <div className="code-row">
               <span className="code">{group.invite_code}</span>
               <button
@@ -599,13 +597,11 @@ export function Sheet({
 
             {autoMode === "email" ? (
               <>
-                <p className="note">
-                  When Uber or DiDi emails a receipt, it is forwarded to Ridewise, which reads the fare, date, time and direction and logs the ride for you.
-                </p>
+                <p className="note">Uber and DiDi receipts become rides automatically.</p>
 
                 <section className="guide">
                   <h3>With n8n, recommended</h3>
-                  <p className="note">Watches your Gmail, iCloud or IMAP inbox and forwards each receipt in the background.</p>
+                  <p className="note">Watches your inbox and forwards each receipt.</p>
                   <button type="button" className="btn btn-primary" onClick={copyN8nWorkflow}>
                     Copy the n8n workflow
                   </button>
@@ -649,9 +645,7 @@ export function Sheet({
               </>
             ) : (
               <>
-                <p className="note">
-                  Build a Shortcut that asks for the fare and sends it to Ridewise. Use the action Get Contents of URL with method POST and a JSON body.
-                </p>
+                <p className="note">A Shortcut that asks for the fare and posts it here.</p>
                 <section className="guide">
                   <h3>Request</h3>
                   <CopyRow label="URL" value={apiUrl} notify={notify} />

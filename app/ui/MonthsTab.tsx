@@ -20,14 +20,18 @@ import { Count, Money } from "./numbers";
 import { RideList } from "./rides";
 import { Segmented } from "./Segmented";
 
-function Rows({ rows }: { rows: { label: string; sub?: string; value: string }[] }) {
+type Dot = "campus" | "home" | "accent" | "violet" | "warn" | "text";
+
+/** One line per row: coloured dot, label, small count, value. */
+function Rows({ rows }: { rows: { label: string; meta?: string; value: string; dot?: Dot }[] }) {
   return (
     <div className="panel list">
       {rows.map((row) => (
-        <div key={row.label} className="row row-static">
-          <span className="row-text">
-            <span className="row-title">{row.label}</span>
-            {row.sub && <span className="row-sub">{row.sub}</span>}
+        <div key={row.label} className="row row-static line-row">
+          <span className="row-title">
+            {row.dot && <i className={`dot bg-${row.dot}`} aria-hidden="true" />}
+            {row.label}
+            {row.meta && <span className="row-meta">{row.meta}</span>}
           </span>
           <span className="row-value">{row.value}</span>
         </div>
@@ -37,13 +41,13 @@ function Rows({ rows }: { rows: { label: string; sub?: string; value: string }[]
 }
 
 /** Four figures in one panel, split by hairlines. */
-function Quad({ items }: { items: { label: string; value: number; format?: (n: number) => string }[] }) {
+function Quad({ items }: { items: { label: string; value: number; format?: (n: number) => string; tone?: string }[] }) {
   return (
     <div className="panel quad">
       {items.map((item) => (
         <div key={item.label} className="quad-cell">
           <span className="label">{item.label}</span>
-          <span className="quad-value">
+          <span className={`quad-value ${item.tone ?? ""}`}>
             <Count value={item.value} format={item.format} />
           </span>
         </div>
@@ -184,7 +188,7 @@ export function MonthsTab({
                   </button>
                 </div>
               </div>
-              <Money value={month.mySpend} roll className="num-hero" />
+              <Money value={month.mySpend} roll className="num-hero c-accent" />
               <p className={`trend ${trendTone}`}>
                 {trendIcon && <Icon name={trendIcon} size={16} />}
                 {trendText}
@@ -222,10 +226,10 @@ export function MonthsTab({
             <>
               <Quad
                 items={[
-                  { label: "Rides", value: month.myRides, format: whole },
-                  { label: "Days ridden", value: month.activeDays, format: whole },
-                  { label: "Per ride", value: month.avgPerRide },
-                  { label: "Saved by sharing", value: month.sharingSaved },
+                  { label: "Rides", value: month.myRides, format: whole, tone: "c-campus" },
+                  { label: "Days ridden", value: month.activeDays, format: whole, tone: "c-violet" },
+                  { label: "Per ride", value: month.avgPerRide, tone: "c-home" },
+                  { label: "Saved by sharing", value: month.sharingSaved, tone: "c-good" },
                 ]}
               />
 
@@ -247,12 +251,12 @@ export function MonthsTab({
                 </div>
                 <Rows
                   rows={[
-                    { label: "To campus", sub: plural(month.campusRides, "ride"), value: egp(month.campusSpend) },
-                    { label: "Back home", sub: plural(month.homeRides, "ride"), value: egp(month.homeSpend) },
-                    { label: "Your half of shared", sub: plural(month.sharedRides, "ride"), value: egp(month.mySharedSpend) },
-                    { label: "Your solo rides", sub: plural(month.soloRides, "ride"), value: egp(month.mySoloSpend) },
-                    { label: "You paid Uber", sub: "full fares, up front", value: egp(month.paidByMe) },
-                    { label: `${otherName} paid Uber`, sub: "full fares, up front", value: egp(month.paidByOthers) },
+                    { label: "To campus", meta: String(month.campusRides), value: egp(month.campusSpend), dot: "campus" },
+                    { label: "Back home", meta: String(month.homeRides), value: egp(month.homeSpend), dot: "home" },
+                    { label: "Shared, your half", meta: String(month.sharedRides), value: egp(month.mySharedSpend), dot: "accent" },
+                    { label: "Solo", meta: String(month.soloRides), value: egp(month.mySoloSpend), dot: "violet" },
+                    { label: "You paid Uber", value: egp(month.paidByMe), dot: "text" },
+                    { label: `${otherName} paid Uber`, value: egp(month.paidByOthers), dot: "warn" },
                   ]}
                 />
               </section>
@@ -283,7 +287,7 @@ export function MonthsTab({
         <div className="stack">
           <section className="hero">
             <p className="hero-label">Since {allTime.since ?? "the start"}</p>
-            <Money value={allTime.mySpend} roll className="num-hero" />
+            <Money value={allTime.mySpend} roll className="num-hero c-accent" />
             <p className="trend">
               {plural(allTime.myRides, "ride")} over {plural(allTime.monthsWithRides, "month")}
             </p>
@@ -291,10 +295,10 @@ export function MonthsTab({
 
           <Quad
             items={[
-              { label: "Average month", value: allTime.avgMonth },
-              { label: "Saved by sharing", value: allTime.saved },
-              ...(allTime.highest ? [{ label: `Highest, ${allTime.highest.shortLabel}`, value: allTime.highest.mySpend }] : []),
-              ...(allTime.lowest ? [{ label: `Lowest, ${allTime.lowest.shortLabel}`, value: allTime.lowest.mySpend }] : []),
+              { label: "Average month", value: allTime.avgMonth, tone: "c-campus" },
+              { label: "Saved by sharing", value: allTime.saved, tone: "c-good" },
+              ...(allTime.highest ? [{ label: `Highest, ${allTime.highest.shortLabel}`, value: allTime.highest.mySpend, tone: "c-home" }] : []),
+              ...(allTime.lowest ? [{ label: `Lowest, ${allTime.lowest.shortLabel}`, value: allTime.lowest.mySpend, tone: "c-violet" }] : []),
             ]}
           />
 
@@ -305,8 +309,7 @@ export function MonthsTab({
             </div>
             <Meter value={allTime.groupSpend} max={BUS_BENCHMARK} tone={allTime.groupSpend > BUS_BENCHMARK ? "bad" : "good"} />
             <p className="label">
-              Together you have spent {egp(allTime.groupSpend)}, {((allTime.groupSpend / BUS_BENCHMARK) * 100).toFixed(0)}% of the pass.{" "}
-              {allTime.groupSpend > BUS_BENCHMARK ? `${egp(allTime.groupSpend - BUS_BENCHMARK)} over.` : `${egp(BUS_BENCHMARK - allTime.groupSpend)} still under.`}
+              {egp(allTime.groupSpend)} spent together, {((allTime.groupSpend / BUS_BENCHMARK) * 100).toFixed(0)}% of the pass
             </p>
           </section>
 
@@ -316,12 +319,12 @@ export function MonthsTab({
             </div>
             <Rows
               rows={[
-                { label: "You", sub: "your share of every ride", value: egp(allTime.mySpend) },
-                { label: otherName, sub: "their share of every ride", value: egp(allTime.otherSpend) },
-                { label: "To campus, shared", sub: plural(allTime.matrix.toCampus.shared.count, "ride"), value: egp(allTime.matrix.toCampus.shared.spend) },
-                { label: "To campus, solo", sub: plural(allTime.matrix.toCampus.solo.count, "ride"), value: egp(allTime.matrix.toCampus.solo.spend) },
-                { label: "Back home, shared", sub: plural(allTime.matrix.backHome.shared.count, "ride"), value: egp(allTime.matrix.backHome.shared.spend) },
-                { label: "Back home, solo", sub: plural(allTime.matrix.backHome.solo.count, "ride"), value: egp(allTime.matrix.backHome.solo.spend) },
+                { label: "You", value: egp(allTime.mySpend), dot: "accent" },
+                { label: otherName, value: egp(allTime.otherSpend), dot: "violet" },
+                { label: "Campus, shared", meta: String(allTime.matrix.toCampus.shared.count), value: egp(allTime.matrix.toCampus.shared.spend), dot: "campus" },
+                { label: "Campus, solo", meta: String(allTime.matrix.toCampus.solo.count), value: egp(allTime.matrix.toCampus.solo.spend), dot: "campus" },
+                { label: "Home, shared", meta: String(allTime.matrix.backHome.shared.count), value: egp(allTime.matrix.backHome.shared.spend), dot: "home" },
+                { label: "Home, solo", meta: String(allTime.matrix.backHome.solo.count), value: egp(allTime.matrix.backHome.solo.spend), dot: "home" },
               ]}
             />
           </section>

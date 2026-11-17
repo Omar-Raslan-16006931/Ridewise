@@ -5,13 +5,13 @@ import type { RideGroup } from "../../lib/types";
 import { egp } from "./format";
 import { Icon } from "./icons";
 
-function Row({ title, sub, onClick, danger, disabled, end }: { icon?: string; title: string; sub?: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; end?: ReactNode }) {
+function Row({ title, detail, onClick, danger, disabled, end }: { icon?: string; title: string; detail?: ReactNode; sub?: ReactNode; onClick: () => void; danger?: boolean; disabled?: boolean; end?: ReactNode }) {
   return (
-    <button type="button" className={`row ${danger ? "is-danger" : ""}`} onClick={onClick} disabled={disabled}>
+    <button type="button" className={`row line-row ${danger ? "is-danger" : ""}`} onClick={onClick} disabled={disabled}>
       <span className="row-text">
         <span className="row-title">{title}</span>
-        {sub && <span className="row-sub">{sub}</span>}
       </span>
+      {detail != null && <span className="row-detail">{detail}</span>}
       {end ?? <Icon name="right" size={18} className="row-chevron" />}
     </button>
   );
@@ -62,11 +62,11 @@ export function SpaceTab({
     <div className="stack">
       <section className="stack-tight">
         <div className="section-head">
-          <h2>Shared space</h2>
+          <h2>{group.name}</h2>
         </div>
         <div className="panel list">
-          <Row icon="users" title={group.name} sub={`Invite code ${group.invite_code}`} onClick={onCopyCode} end={<span className="text-btn">Copy</span>} />
-          <Row icon="wallet" title="Weekly budget" sub={`${egp(weeklyBudget)} a week, ${egp(weeklyBudget / 4)} a college day`} onClick={onBudget} />
+          <Row title="Invite code" detail={<span className="c-accent">{group.invite_code}</span>} onClick={onCopyCode} end={<span className="text-btn">Copy</span>} />
+          <Row title="Weekly budget" detail={`EGP ${egp(weeklyBudget)}`} onClick={onBudget} />
         </div>
       </section>
 
@@ -75,16 +75,15 @@ export function SpaceTab({
           <h2>Automation</h2>
         </div>
         <div className="panel list">
-          <Row icon="bolt" title="Log rides automatically" sub="From Uber and DiDi receipts, or Siri" onClick={onShortcut} />
+          <Row title="Auto-log from receipts" onClick={onShortcut} />
           {nativeApp && (
             <Row
-              icon="bell"
               title="Ride notifications"
-              sub={notificationPermission === "granted" ? "On. Tap to send a test." : notificationPermission === "denied" ? "Off in iPhone Settings" : "Tap to allow"}
+              detail={notificationPermission === "granted" ? <span className="c-good">On</span> : "Off"}
               onClick={onNotifications}
             />
           )}
-          {cloud && signedIn && <Row icon="send" title={ntfyTesting ? "Sending" : "Test ntfy alert"} onClick={onNtfyTest} disabled={ntfyTesting} />}
+          {cloud && signedIn && <Row title={ntfyTesting ? "Sending" : "Send test alert"} onClick={onNtfyTest} disabled={ntfyTesting} />}
         </div>
       </section>
 
@@ -94,14 +93,12 @@ export function SpaceTab({
             <h2>Account</h2>
           </div>
           <div className="panel list">
-            {signedIn && !nativeApp && (
-              <Row icon="key" title="Face ID sign-in" sub={hasPasskey ? "On for this device" : "Off"} onClick={onPasskey} />
-            )}
-            {signedIn && !nativeApp && hasPasskey && <Row icon="x" title="Remove Face ID" onClick={onRemovePasskey} />}
+            {signedIn && !nativeApp && <Row title="Face ID sign-in" detail={hasPasskey ? <span className="c-good">On</span> : "Off"} onClick={onPasskey} />}
+            {signedIn && !nativeApp && hasPasskey && <Row title="Remove Face ID" onClick={onRemovePasskey} />}
             {signedIn ? (
-              <Row icon="logout" title="Sign out" sub={email ?? currentName} onClick={onSignOut} danger end={<span />} />
+              <Row title="Sign out" detail={email ?? currentName} onClick={onSignOut} danger end={<span />} />
             ) : (
-              <Row icon="user" title="Sign in with Google" onClick={onSignIn} />
+              <Row title="Sign in with Google" onClick={onSignIn} />
             )}
           </div>
         </section>
