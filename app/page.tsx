@@ -922,6 +922,7 @@ export default function Home() {
                   members={members}
                   currentUserId={currentUserId}
                   onOpenRide={openRide}
+                  onLog={() => requestAction("add")}
                   onSettleUp={showUnsettled}
                   onSeeAll={() => {
                     setRidesFilter("all");

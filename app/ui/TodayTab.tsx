@@ -38,6 +38,7 @@ export function TodayTab({
   members,
   currentUserId,
   onOpenRide,
+  onLog,
   onSettleUp,
   onSeeAll,
   onEditBudget,
@@ -57,6 +58,7 @@ export function TodayTab({
   members: Member[];
   currentUserId: string;
   onOpenRide: (trip: Trip) => void;
+  onLog: () => void;
   onSettleUp: () => void;
   onSeeAll: () => void;
   onEditBudget: () => void;
@@ -71,12 +73,16 @@ export function TodayTab({
       <section className="hero">
         <p className="hero-label">{net === 0 ? "You are all square" : net > 0 ? `${otherName} owes you` : `You owe ${otherName}`}</p>
         <Money value={Math.abs(net)} roll className={`num-hero ${net > 0 ? "c-accent" : net < 0 ? "c-warn" : ""}`} />
-        {unsettledCount > 0 && (
-          <button type="button" className="text-btn" onClick={onSettleUp}>
-            {plural(unsettledCount, "ride")} to settle
-            <Icon name="right" size={16} />
+        <div className="hero-actions">
+          <button type="button" className="hero-btn hero-btn-main" onClick={onLog}>
+            Log ride
           </button>
-        )}
+          {unsettledCount > 0 && (
+            <button type="button" className="hero-btn" onClick={onSettleUp}>
+              Settle {plural(unsettledCount, "ride")}
+            </button>
+          )}
+        </div>
       </section>
 
       <section className="panel duo">
