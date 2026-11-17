@@ -3,7 +3,7 @@ import "./styles.css";
 
 export const metadata: Metadata = {
   title: "Ridewise | Shared Uber ledger",
-  description: "A shared Uber ledger for two friends: every ride, every half, every month.",
+  description: "A calm, shared Uber ledger for two friends.",
   applicationName: "Ridewise",
   appleWebApp: {
     capable: true,
@@ -18,21 +18,11 @@ export const viewport: Viewport = {
   maximumScale: 1,
   userScalable: false,
   viewportFit: "cover",
-  themeColor: "#f5f2ea",
-  colorScheme: "light",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="" />
-        <link
-          rel="stylesheet"
-          href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400..800&display=swap"
-        />
-      </head>
       <body>{children}</body>
     </html>
   );
